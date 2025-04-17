@@ -29,6 +29,8 @@ WORKDIR /app
 COPY --from=deps /app/.next ./.next
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/package.json ./package.json
+COPY --from=deps /app/prisma ./prisma
+COPY --from=deps /app/tsconfig.json ./tsconfig.json
 
 # 10. Set environment variable to production
 ENV NODE_ENV production
@@ -37,4 +39,4 @@ ENV NODE_ENV production
 EXPOSE 3000
 
 # 12. Start Next.js app
-CMD ["npm", "start"]
+CMD ["sh", "-c", "npx prisma db push && npm start"]
