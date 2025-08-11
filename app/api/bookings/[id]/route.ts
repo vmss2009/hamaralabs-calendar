@@ -3,7 +3,7 @@ import prisma from "@/lib/db/prisma";
 import { auth } from "@/lib/auth/auth";
 import { startOfDay } from "date-fns";
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, { params }: { params: any }) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
