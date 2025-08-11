@@ -8,23 +8,48 @@ datasource db {
 }
 
 model User {
-  id                   String                 @id @default(cuid())
-  email                String                 @unique
-  name                 String?
-  username             String                 @unique
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
-  schedules            Schedule[]
+  id        String     @id @default(cuid())
+  email     String     @unique
+  name      String?
+  username  String     @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  schedules Schedule[]
+  Booking   Booking[]
 }
 
 model Schedule {
-  id                   String                 @id @default(cuid())
-  userId               String
-  date                 DateTime
-  timeSlots            String[]               // Array of time slots (e.g., ["9:00-10:00", "10:00-11:00"])
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
-  user                 User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id        String   @id @default(cuid())
+  userId    String
+  date      DateTime
+  timeSlots String[] // Array of time slots (e.g., ["9:00-10:00", "10:00-11:00"])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([userId, date])
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELED
+}
+
+model Booking {
+  id         String        @id @default(cuid())
+  userId     String // provider who owns the schedule
+  date       DateTime // startOfDay for the booked date
+  timeSlot   String // e.g. "09:00-10:00"
+  guestName  String
+  guestEmail String
+  notes      String?
+  status     BookingStatus @default(CONFIRMED)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Prevent double-booking the same slot for the same user and date
+  @@unique([userId, date, timeSlot])
 }
