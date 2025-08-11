@@ -76,6 +76,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               email: user.email,
               name: user.name || null,
               username,
+              metadata: {
+                isPublic: true,
+                callOnBook: false,
+              },
             },
           });
         }

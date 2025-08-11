@@ -8,22 +8,23 @@ export async function GET(
   try {
     const { username } = params;
     
-    // Find the user by username
-    const user = await prisma.user.findUnique({
+    // Fetch user including metadata (cast to any until prisma client regenerated with metadata field)
+    const user = await (prisma.user as any).findUnique({
       where: { username },
-      select: {
-        id: true,
-        username: true,
-        name: true,
-        email: true,
-      },
     });
     
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
     
-    return NextResponse.json(user);
+    const isPublic = (user?.metadata && user.metadata.isPublic !== undefined) ? user.metadata.isPublic : true;
+    return NextResponse.json({
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      email: user.email,
+      isPublic,
+    });
   } catch (error) {
     console.error("Error fetching user:", error);
     return NextResponse.json(

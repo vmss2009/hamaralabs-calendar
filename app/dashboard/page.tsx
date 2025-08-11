@@ -23,7 +23,7 @@ export default async function DashboardPage() {
   return (
     <div>
       <Navigation username={user.username || ""} />
-      <div className="container mx-auto py-8">
+      <div className="container mx-auto py-8 px-4">
         <Calendar userId={session.user.id || ""} />
       </div>
     </div>

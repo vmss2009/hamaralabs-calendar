@@ -4,16 +4,12 @@ import { format, isBefore, startOfDay } from "date-fns";
 import { Calendar as BigCalendar, dateFnsLocalizer, Event } from "react-big-calendar";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { parse, startOfWeek, getDay } from "date-fns";
-import { enUS } from 'date-fns/locale';
-import { useEffect, useState, use, useCallback } from "react";
+import { enUS } from "date-fns/locale";
+import { useEffect, useState, useCallback, useMemo, use } from "react";
 import { toast } from "@/components/ui/use-toast";
 
-// Define the locales for date-fns
-const locales = {
-  "en-US": enUS,
-};
+const locales = { "en-US": enUS };
 
-// Configure the localizer
 const localizer = dateFnsLocalizer({
   format,
   parse,
@@ -22,40 +18,9 @@ const localizer = dateFnsLocalizer({
   locales: locales as any,
 } as any);
 
-// Define the time slots
-const timeSlots = [
-  "00:00-01:00",
-  "01:00-02:00",
-  "02:00-03:00",
-  "03:00-04:00",
-  "04:00-05:00",
-  "05:00-06:00",
-  "06:00-07:00",
-  "07:00-08:00",
-  "08:00-09:00",
-  "09:00-10:00",
-  "10:00-11:00",
-  "11:00-12:00",
-  "12:00-13:00",
-  "13:00-14:00",
-  "14:00-15:00",
-  "15:00-16:00",
-  "16:00-17:00",
-  "17:00-18:00",
-  "18:00-19:00",
-  "19:00-20:00",
-  "20:00-21:00",
-  "21:00-22:00",
-  "22:00-23:00",
-  "23:00-00:00"
-];
-
 interface SchedulePageProps {
-  params: Promise<{
-    username: string;
-  }>;
+  params: Promise<{ username: string }>;
 }
-
 interface Schedule {
   id: string;
   userId: string;
@@ -64,34 +29,33 @@ interface Schedule {
   createdAt: Date;
   updatedAt: Date;
 }
-
 interface CalendarEvent extends Event {
   timeSlots?: string[];
 }
 
 export default function SchedulePage({ params }: SchedulePageProps) {
-  const resolvedParams = use(params);
-  const username = resolvedParams.username;
+  const { username } = use(params);
+
   const [user, setUser] = useState<any>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedSchedule, setSelectedSchedule] = useState<Schedule | null>(null);
+
+  // booking UI state
   const [isBooking, setIsBooking] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
   const [notes, setNotes] = useState("");
 
-  
-  // Get today's date (start of day)
-  const today = startOfDay(new Date());
-  
+  // Stable reference to today's start (prevents infinite effect loops)
+  const today = useMemo(() => startOfDay(new Date()), []);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch user data
         const userResponse = await fetch(`/api/users/${username}`);
         if (!userResponse.ok) {
           if (userResponse.status === 404) {
@@ -102,34 +66,64 @@ export default function SchedulePage({ params }: SchedulePageProps) {
         }
         const userData = await userResponse.json();
         setUser(userData);
-        
-        // Fetch schedules
-        const schedulesResponse = await fetch(`/api/schedules/public/${username}`);
-        if (!schedulesResponse.ok) {
-          throw new Error("Failed to fetch schedules");
+
+  const schedulesResponse = await fetch(`/api/schedules/public/${username}?leadMinutes=30`);
+        if (schedulesResponse.status === 403) {
+          setError("This user's schedule is currently private.");
+          return;
         }
+        if (!schedulesResponse.ok) throw new Error("Failed to fetch schedules");
         const schedulesData = await schedulesResponse.json();
-        
-        // Convert date strings to Date objects and filter out past dates
-        const formattedSchedules = schedulesData
-          .map((schedule: any) => ({
-            ...schedule,
-            date: new Date(schedule.date),
-            createdAt: new Date(schedule.createdAt),
-            updatedAt: new Date(schedule.updatedAt)
+
+        const formatted = schedulesData
+          .map((s: any) => ({
+            ...s,
+            date: new Date(s.date),
+            createdAt: new Date(s.createdAt),
+            updatedAt: new Date(s.updatedAt),
           }))
-          .filter((schedule: Schedule) => !isBefore(schedule.date, today));
-        
-        setSchedules(formattedSchedules);
+          // Remove past dates and any schedule that has zero timeSlots (treat as unscheduled)
+          .filter((s: Schedule) => !isBefore(s.date, today) && s.timeSlots && s.timeSlots.length > 0);
+
+        setSchedules(formatted);
       } catch (err) {
         setError(err instanceof Error ? err.message : "An unknown error occurred");
       } finally {
         setLoading(false);
       }
     };
-    
     fetchData();
-  }, [username]);
+  }, [username, today]);
+
+  const handleSelectSlot = useCallback(
+    (slotInfo: any) => {
+      const picked = slotInfo.start;
+      if (isBefore(picked, today)) {
+        toast({
+          title: "Cannot view past dates",
+          description: "You can only view availability for today and future dates.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setSelectedDate(picked);
+      const schedule = schedules.find(
+        (s) => format(s.date, "yyyy-MM-dd") === format(picked, "yyyy-MM-dd") && s.timeSlots && s.timeSlots.length > 0
+      );
+      setSelectedSchedule(schedule ? schedule : null);
+    },
+    [schedules, today]
+  );
+
+  const events: CalendarEvent[] = schedules
+    .filter((s) => s.timeSlots && s.timeSlots.length > 0)
+    .map((schedule: Schedule) => ({
+      id: schedule.id,
+      title: "Available",
+      start: schedule.date,
+      end: schedule.date,
+      timeSlots: schedule.timeSlots,
+    }));
 
   async function submitBooking() {
     if (!selectedDate || !selectedSlot) return;
@@ -147,23 +141,25 @@ export default function SchedulePage({ params }: SchedulePageProps) {
           notes,
         }),
       });
-
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j?.message || "Failed to book");
       }
-
       toast({ title: "Booked!", description: `You’re in for ${selectedSlot}.` });
 
-      // Refresh the schedule list so the slot disappears
+      // refresh schedules so slot disappears
       const schedulesResponse = await fetch(`/api/schedules/public/${username}`);
       const schedulesData = await schedulesResponse.json();
       const formatted = schedulesData
-        .map((s: any) => ({ ...s, date: new Date(s.date), createdAt: new Date(s.createdAt), updatedAt: new Date(s.updatedAt) }))
-        .filter((s: Schedule) => !isBefore(s.date, today));
+        .map((s: any) => ({
+          ...s,
+          date: new Date(s.date),
+          createdAt: new Date(s.createdAt),
+          updatedAt: new Date(s.updatedAt),
+        }))
+        .filter((s: Schedule) => !isBefore(s.date, today) && s.timeSlots && s.timeSlots.length > 0);
       setSchedules(formatted);
 
-      // Reset form
       setSelectedSlot(null);
       setGuestName("");
       setGuestEmail("");
@@ -174,72 +170,37 @@ export default function SchedulePage({ params }: SchedulePageProps) {
       setIsBooking(false);
     }
   }
-  
-  // Handle date selection
-  const handleSelectSlot = useCallback((slotInfo: any) => {
-    const selectedDate = slotInfo.start;
-    
-    // Check if the selected date is in the past
-    if (isBefore(selectedDate, today)) {
-      toast({
-        title: "Cannot view past dates",
-        description: "You can only view availability for today and future dates.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    setSelectedDate(selectedDate);
-    
-    // Find schedule for the selected date
-    const schedule = schedules.find(
-      (s) => format(s.date, "yyyy-MM-dd") === format(selectedDate, "yyyy-MM-dd")
-    );
-    
-    setSelectedSchedule(schedule || null);
-  }, [schedules, today]);
-  
+
   if (loading) {
     return (
       <div className="container mx-auto py-8">
-        <div className="text-center">Loading...</div>
+        <div>Loading...</div>
       </div>
     );
   }
-  
   if (error) {
     return (
       <div className="container mx-auto py-8">
-        <div className="text-center text-red-500">{error}</div>
+        <div>{error}</div>
       </div>
     );
   }
-  
   if (!user) {
     return (
       <div className="container mx-auto py-8">
-        <div className="text-center">User not found</div>
+        <div>User not found</div>
       </div>
     );
   }
-  
-  // Convert schedules to events for the calendar
-  const events: CalendarEvent[] = schedules.map((schedule: Schedule) => {
-    return {
-      id: schedule.id,
-      title: "Available",
-      start: schedule.date,
-      end: schedule.date,
-      timeSlots: schedule.timeSlots,
-    };
-  });
-  
+
   return (
-    <div className="container mx-auto py-8 px-4 text-black">
+    <div className="container mx-auto py-8 px-4">
       <div className="flex flex-col md:flex-row gap-6">
+        {/* Calendar */}
         <div className="w-full md:w-2/3">
-          <div className="bg-white p-4 rounded-lg shadow-md mb-4">
-            <h1 className="text-3xl font-bold mb-2 text-black">{user.name} Schedule</h1>
+          <div className="rounded-[14px] shadow-lg p-4 border"
+               style={{ background: "var(--background)", borderColor: "color-mix(in srgb, var(--foreground) 15%, transparent)" }}>
+            <h1 className="text-3xl font-bold mb-2">{user.name} Schedule</h1>
 
             {/* @ts-ignore */}
             <BigCalendar
@@ -257,27 +218,25 @@ export default function SchedulePage({ params }: SchedulePageProps) {
                 return {
                   style: {
                     cursor: isPastDate ? "default" : "pointer",
-                    backgroundColor: isPastDate ? "#f3f4f6" : "white",
+                    backgroundColor: isPastDate ? "color-mix(in srgb, var(--foreground) 6%, transparent)" : "transparent",
                   },
                   className: isPastDate ? "past-date" : "",
                 };
               }}
-              eventPropGetter={(event: Event) => ({
+              eventPropGetter={() => ({
                 style: {
-                  backgroundColor: "#4f46e5",
-                  borderRadius: "4px",
+                  backgroundColor: "var(--foreground)",
+                  color: "var(--background)",
+                  borderRadius: 6,
                   width: "90%",
                   margin: "0 auto",
-                  color: "#fff",
                 },
               })}
               components={{
                 event: ({ event }: { event: CalendarEvent }) => (
                   <div className="p-1" onClick={() => handleSelectSlot(event)}>
-                    <div className="font-semibold text-black">{event.title}</div>
-                    <div className="text-xs text-black">
-                      {event.timeSlots?.length} time slots available
-                    </div>
+                    <div className="font-semibold">{event.title}</div>
+                    <div className="text-xs">{event.timeSlots?.length} time slots available</div>
                   </div>
                 ),
               }}
@@ -285,36 +244,36 @@ export default function SchedulePage({ params }: SchedulePageProps) {
           </div>
         </div>
 
-        {/* Side panel for viewing & booking time slots */}
+        {/* Side panel */}
         <div className="w-full md:w-1/3">
-          <div className="bg-white p-4 rounded-lg shadow-md text-black">
-            <h2 className="text-xl font-semibold mb-4 text-black">
+          <div className="rounded-[14px] shadow-lg p-4 border"
+               style={{ background: "var(--background)", borderColor: "color-mix(in srgb, var(--foreground) 15%, transparent)" }}>
+            <h2 className="text-xl font-semibold mb-4">
               {selectedDate
                 ? `Available Time Slots for ${format(selectedDate, "MMMM d, yyyy")}`
                 : "Select a date to view available time slots"}
             </h2>
 
             {selectedDate && isBefore(selectedDate, today) ? (
-              <div className="text-center py-8 text-black">
-                No time slots available for past dates
-              </div>
+              <div className="text-center py-8">No time slots available for past dates</div>
             ) : selectedSchedule ? (
               <div>
                 <div className="mb-4">
-                  <p className="text-sm text-black">
-                    {selectedSchedule.timeSlots.length} time slots available
-                  </p>
+                  <p className="text-sm">{selectedSchedule.timeSlots.length} time slots available</p>
                 </div>
 
                 <div className="space-y-2">
                   {selectedSchedule.timeSlots.map((slot, index) => (
                     <div
                       key={index}
-                      className="p-3 bg-gray-50 rounded-md border border-gray-200 flex items-center justify-between"
+                      className="p-3 rounded-md border flex items-center justify-between"
+                      style={{ background: "color-mix(in srgb, var(--foreground) 4%, transparent)",
+                               borderColor: "color-mix(in srgb, var(--foreground) 15%, transparent)" }}
                     >
-                      <div className="font-medium text-black">{slot}</div>
+                      <div className="font-medium">{slot}</div>
                       <button
-                        className="px-3 py-1 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                        className="px-3 py-1 text-sm rounded-md"
+                        style={{ background: "var(--foreground)", color: "var(--background)" }}
                         onClick={() => setSelectedSlot(slot)}
                       >
                         Book
@@ -325,40 +284,44 @@ export default function SchedulePage({ params }: SchedulePageProps) {
 
                 {/* Booking form */}
                 {selectedSlot && (
-                  <div className="mt-6 border-t pt-4">
-                    <h3 className="font-semibold text-black mb-3">
-                      Book {selectedSlot}
-                    </h3>
+                  <div className="mt-6 border-t pt-4"
+                       style={{ borderColor: "color-mix(in srgb, var(--foreground) 15%, transparent)" }}>
+                    <h3 className="font-semibold mb-3">Book {selectedSlot}</h3>
                     <div className="space-y-3">
                       <input
-                        className="w-full border rounded-md p-2 text-black"
+                        className="w-full border rounded-md p-2"
+                        style={{ background: "var(--background)", borderColor: "color-mix(in srgb, var(--foreground) 20%, transparent)" }}
                         placeholder="Your name"
                         value={guestName}
                         onChange={(e) => setGuestName(e.target.value)}
                       />
                       <input
-                        className="w-full border rounded-md p-2 text-black"
+                        className="w-full border rounded-md p-2"
+                        style={{ background: "var(--background)", borderColor: "color-mix(in srgb, var(--foreground) 20%, transparent)" }}
                         placeholder="Your email"
                         type="email"
                         value={guestEmail}
                         onChange={(e) => setGuestEmail(e.target.value)}
                       />
                       <textarea
-                        className="w-full border rounded-md p-2 text-black"
+                        className="w-full border rounded-md p-2"
+                        style={{ background: "var(--background)", borderColor: "color-mix(in srgb, var(--foreground) 20%, transparent)" }}
                         placeholder="Notes (optional)"
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                       />
                       <div className="flex gap-2 justify-end">
                         <button
-                          className="px-4 py-2 border rounded-md hover:bg-gray-100 text-black"
+                          className="px-4 py-2 border rounded-md"
+                          style={{ borderColor: "color-mix(in srgb, var(--foreground) 25%, transparent)" }}
                           onClick={() => setSelectedSlot(null)}
                           disabled={isBooking}
                         >
                           Cancel
                         </button>
                         <button
-                          className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
+                          className="px-4 py-2 rounded-md disabled:opacity-50"
+                          style={{ background: "var(--foreground)", color: "var(--background)" }}
                           onClick={submitBooking}
                           disabled={isBooking || !guestName || !guestEmail}
                         >
@@ -370,17 +333,13 @@ export default function SchedulePage({ params }: SchedulePageProps) {
                 )}
               </div>
             ) : selectedDate ? (
-              <div className="text-center py-8 text-black">
-                No time slots available for this date
-              </div>
+              <div className="text-center py-8">No time slots available for this date</div>
             ) : (
-              <div className="text-center py-8 text-black">
-                Click on a date in the calendar to view available time slots
-              </div>
+              <div className="text-center py-8">Click on a date in the calendar to view available time slots</div>
             )}
           </div>
         </div>
       </div>
     </div>
   );
-} 
+}

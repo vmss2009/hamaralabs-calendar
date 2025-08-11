@@ -117,6 +117,16 @@ export async function POST(req: Request) {
           },
         }),
       ]);
+      // Optional external phone call trigger based on user metadata
+      try {
+        const callOnBook = (user as any)?.metadata?.callOnBook === true;
+        if (callOnBook) {
+          await fetch("https://us-central1-hamaralabs-prod.cloudfunctions.net/phoneCall/call").catch(() => {});
+        }
+      } catch (extErr) {
+        console.error("callOnBook external trigger failed", extErr);
+        // Do not fail the booking because of an auxiliary action
+      }
 
       return NextResponse.json({ booking }, { status: 201 });
     } catch (err: any) {

@@ -12,6 +12,7 @@ model User {
   email     String     @unique
   name      String?
   username  String     @unique
+  metadata  Json?      @default("{}") // Arbitrary user metadata (e.g., {"isPublic": true})
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   schedules Schedule[]
