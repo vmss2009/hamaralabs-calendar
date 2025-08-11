@@ -285,10 +285,10 @@ export default function Calendar({ userId }: CalendarProps) {
               <div className="mb-4">
                 <h3 className="text-lg font-medium mb-2">Available Time Slots</h3>
                 <div className="grid grid-cols-1 gap-2 max-h-60 overflow-y-auto">
-                  {schedules[0].timeSlots.map((slot, index) => (
+          {schedules[0].timeSlots.map((slot, index) => (
                     <div key={index} className="p-2 rounded-md"
                          style={{ background: "color-mix(in srgb, var(--foreground) 6%, transparent)" }}>
-                      <label>{slot}</label>
+            <label>{slot} IST</label>
                     </div>
                   ))}
                 </div>
@@ -319,7 +319,7 @@ export default function Calendar({ userId }: CalendarProps) {
                         onChange={() => handleTimeSlotChange(slot)}
                         className="mr-2 h-5 w-5"
                       />
-                      <label htmlFor={slot}>{slot}</label>
+                      <label htmlFor={slot}>{slot} IST</label>
                     </div>
                   ))}
                 </div>

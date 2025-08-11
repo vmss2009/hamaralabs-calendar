@@ -263,14 +263,14 @@ export default function SchedulePage({ params }: SchedulePageProps) {
                 </div>
 
                 <div className="space-y-2">
-                  {selectedSchedule.timeSlots.map((slot, index) => (
+          {selectedSchedule.timeSlots.map((slot, index) => (
                     <div
                       key={index}
                       className="p-3 rounded-md border flex items-center justify-between"
                       style={{ background: "color-mix(in srgb, var(--foreground) 4%, transparent)",
                                borderColor: "color-mix(in srgb, var(--foreground) 15%, transparent)" }}
                     >
-                      <div className="font-medium">{slot}</div>
+            <div className="font-medium">{slot} IST</div>
                       <button
                         className="px-3 py-1 text-sm rounded-md"
                         style={{ background: "var(--foreground)", color: "var(--background)" }}
