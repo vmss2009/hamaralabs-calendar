@@ -41,7 +41,6 @@ export default function SchedulePage({ params }: SchedulePageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [selectedSchedule, setSelectedSchedule] = useState<Schedule | null>(null);
 
   // booking UI state
   const [isBooking, setIsBooking] = useState(false);
@@ -95,6 +94,25 @@ export default function SchedulePage({ params }: SchedulePageProps) {
     fetchData();
   }, [username, today]);
 
+  // Set today's date initially (once)
+  useEffect(() => {
+    if (!selectedDate) {
+      setSelectedDate(today);
+    }
+  }, [selectedDate, today]);
+
+  // Derive the schedule for the selected date
+  const selectedSchedule = useMemo(() => {
+    if (!selectedDate) return null;
+    const match = schedules.find(
+      (s) =>
+        format(s.date, "yyyy-MM-dd") === format(selectedDate, "yyyy-MM-dd") &&
+        s.timeSlots &&
+        s.timeSlots.length > 0
+    );
+    return match ?? null;
+  }, [schedules, selectedDate]);
+
   const handleSelectSlot = useCallback(
     (slotInfo: any) => {
       const picked = slotInfo.start;
@@ -107,12 +125,8 @@ export default function SchedulePage({ params }: SchedulePageProps) {
         return;
       }
       setSelectedDate(picked);
-      const schedule = schedules.find(
-        (s) => format(s.date, "yyyy-MM-dd") === format(picked, "yyyy-MM-dd") && s.timeSlots && s.timeSlots.length > 0
-      );
-      setSelectedSchedule(schedule ? schedule : null);
     },
-    [schedules, today]
+    [today]
   );
 
   const events: CalendarEvent[] = schedules
@@ -148,7 +162,7 @@ export default function SchedulePage({ params }: SchedulePageProps) {
       toast({ title: "Booked!", description: `You’re in for ${selectedSlot}.` });
 
       // refresh schedules so slot disappears
-      const schedulesResponse = await fetch(`/api/schedules/public/${username}`);
+  const schedulesResponse = await fetch(`/api/schedules/public/${username}?leadMinutes=30`);
       const schedulesData = await schedulesResponse.json();
       const formatted = schedulesData
         .map((s: any) => ({
@@ -213,14 +227,23 @@ export default function SchedulePage({ params }: SchedulePageProps) {
               onSelectSlot={handleSelectSlot}
               className="calendar-custom"
               views={["month"] as any}
+              date={(selectedDate || today) as Date}
               dayPropGetter={(date: Date) => {
-                const isPastDate = isBefore(date, today);
+                const isPastDate = isBefore(startOfDay(date), today);
+                const isToday = format(date, "yyyy-MM-dd") === format(today, "yyyy-MM-dd");
+                const isSelected = !!selectedDate && format(date, "yyyy-MM-dd") === format(selectedDate, "yyyy-MM-dd");
                 return {
                   style: {
                     cursor: isPastDate ? "default" : "pointer",
-                    backgroundColor: isPastDate ? "color-mix(in srgb, var(--foreground) 6%, transparent)" : "transparent",
+                    backgroundColor: isSelected
+                      ? "color-mix(in srgb, var(--foreground) 14%, transparent)"
+                      : isPastDate
+                      ? "color-mix(in srgb, var(--foreground) 6%, transparent)"
+                      : "transparent",
+                    outline: isToday ? "2px solid color-mix(in srgb, var(--foreground) 40%, transparent)" : "none",
+                    outlineOffset: isToday ? "-2px" : undefined,
                   },
-                  className: isPastDate ? "past-date" : "",
+                  className: isPastDate ? "past-date" : isSelected ? "selected-date" : isToday ? "today-date" : "",
                 };
               }}
               eventPropGetter={() => ({
@@ -259,7 +282,7 @@ export default function SchedulePage({ params }: SchedulePageProps) {
             ) : selectedSchedule ? (
               <div>
                 <div className="mb-4">
-                  <p className="text-sm">{selectedSchedule.timeSlots.length} time slots available</p>
+                  <p className="text-sm">{selectedSchedule.timeSlots.length} slots available</p>
                 </div>
 
                 <div className="space-y-2">
