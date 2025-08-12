@@ -50,10 +50,16 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const { username, date, timeSlot, guestName, guestEmail, notes } = await req.json();
+  const { username, date, timeSlot, guestName, guestEmail, notes, slotId } = await req.json();
 
     if (!username || !date || !timeSlot || !guestName || !guestEmail) {
       return NextResponse.json({ message: "Missing fields" }, { status: 400 });
+    }
+
+    // If provided, ensure the Slot exists
+    if (slotId) {
+      const slot = await prisma.slot.findUnique({ where: { id: String(slotId) } });
+      if (!slot) return NextResponse.json({ message: "Invalid slotId" }, { status: 400 });
     }
 
     // Resolve provider
@@ -106,6 +112,7 @@ export async function POST(req: Request) {
             guestEmail,
             notes,
             status: "CONFIRMED",
+            ...(slotId ? { slotId: String(slotId) } : {}),
           },
         }),
         prisma.schedule.update({

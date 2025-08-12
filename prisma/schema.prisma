@@ -49,8 +49,29 @@ model Booking {
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  Slot   Slot?   @relation(fields: [slotId], references: [id])
+  slotId String?
 
   // Prevent double-booking the same slot for the same user and date
   @@unique([userId, date, timeSlot])
+}
+
+// A payment/transaction container (named Slot) that can be associated with one or more bookings
+model Slot {
+  id                    String   @id @default(cuid())
+  merchantTransactionId String   @unique
+  merchantId            String
+  email                 String // can be empty string if unknown
+  phone                 String
+  amount                Int // stored in smallest currency unit or whole units depending on upstream
+  status                String
+  items                 Json     @default("[]") // array payload from the upstream, stored as JSON
+  paidBy                String?
+  paymentMethod         String?
+  notes                 String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  bookings Booking[]
 }
