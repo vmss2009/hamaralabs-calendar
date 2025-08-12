@@ -32,10 +32,7 @@ export async function GET(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const isPublic = user?.metadata?.isPublic !== undefined ? user.metadata.isPublic : true;
-    if (isPublic === false) {
-      return NextResponse.json({ error: "Schedule is private" }, { status: 403 });
-    }
+  // Visibility is enforced at the UI level; always return schedules here
 
     // Get all schedules for this user
     let schedules = await prisma.schedule.findMany({

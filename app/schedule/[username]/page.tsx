@@ -65,12 +65,13 @@ export default function SchedulePage({ params }: SchedulePageProps) {
         }
         const userData = await userResponse.json();
         setUser(userData);
-
-  const schedulesResponse = await fetch(`/api/schedules/public/${username}?leadMinutes=30`);
-        if (schedulesResponse.status === 403) {
+        // Enforce visibility at UI level
+        if (userData && userData.isPublic === false) {
           setError("This user's schedule is currently private.");
           return;
         }
+
+        const schedulesResponse = await fetch(`/api/schedules/public/${username}?leadMinutes=30`);
         if (!schedulesResponse.ok) throw new Error("Failed to fetch schedules");
         const schedulesData = await schedulesResponse.json();
 
