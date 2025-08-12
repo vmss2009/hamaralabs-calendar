@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { auth } from "@/lib/auth/auth";
 
-// const allowedOrigins = [process.env.NEXT_PUBLIC_SITE_URL, "http://localhost:3001"];
-// every url for now
-const allowedOrigins = ["*"];
+const allowedOrigins = (process.env.NEXT_PUBLIC_ALLOWED_ORIGINS || "")
+	.split(",")
+	.map((o) => o.trim())
+	.filter(Boolean);
 
 function isOriginAllowed(origin: string | null): boolean {
 	if (!origin) return true; // same-origin/non-browser or server-to-server (no Origin header) -> allow
@@ -81,4 +82,3 @@ export default auth((req: NextRequest) => {
 export const config = {
 	matcher: ["/api/:path*"],
 };
-
