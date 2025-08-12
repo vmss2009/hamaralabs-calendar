@@ -1,26 +1,33 @@
 version: "3.8"
 
+networks:
+  hamaralabs-net:
+
+volumes:
+  db-data:
+
 services:
-  db:
+  hamaralabs-calendar-db:
+    container_name: hamaralabs-calendar-db
     image: postgres:15
     restart: always
     environment:
       POSTGRES_USER: hamaralabs
       POSTGRES_PASSWORD: hamaralabs
       POSTGRES_DB: hamaralabs
-    ports:
-      - "5433:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
+    networks:
+      - hamaralabs-net
 
-  app:
-    image: ghcr.io/vmss2009/hamaralabs-calendar:v3
+  hamaralabs-calendar:
+    container_name: hamaralabs-calendar
+    image: ghcr.io/vmss2009/hamaralabs-calendar:v6
     depends_on:
-      - db
+      - hamaralabs-calendar-db
     ports:
-      - "3000:3000"
+      - "3005:3000"
     env_file:
-      - .env  # Load environment variables from .env file
-
-volumes:
-  db-data:
+      - .env
+    networks:
+      - hamaralabs-net
