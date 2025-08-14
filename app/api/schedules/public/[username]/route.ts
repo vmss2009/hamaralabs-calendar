@@ -34,10 +34,17 @@ export async function GET(
 
   // Visibility is enforced at the UI level; always return schedules here
 
-    // Get all schedules for this user
+    // Get all schedules for this user, filter out past dates (IST)
     let schedules = await prisma.schedule.findMany({
       where: { userId: user.id },
       orderBy: { date: "asc" },
+    });
+
+    // Only keep schedules for today or future (IST)
+    schedules = schedules.filter(sched => {
+      const schedDate = new Date(sched.date);
+      const schedDayStart = startOfDayIST(schedDate);
+      return schedDayStart.getTime() >= todayStart.getTime();
     });
 
     // Apply leadMinutes filtering only to today's schedule (do not mutate DB, only response)
