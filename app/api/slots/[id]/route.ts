@@ -1,25 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
 
-export async function GET(_req: NextRequest, context: any) {
+export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const id = context?.params?.id as string | undefined;
+    const { id } = await context.params;
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
     const slot = await prisma.slot.findUnique({ where: { id } });
     if (!slot) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(slot);
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: "Failed to fetch slot" }, { status: 500 });
   }
 }
 
-export async function PATCH(req: NextRequest, context: any) {
+export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const id = context?.params?.id as string | undefined;
+    const { id } = await context.params;
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
     const body = await req.json();
 
-    const data: any = {};
+    const data: Record<string, unknown> = {};
     if (body.merchantTransactionId !== undefined) data.merchantTransactionId = String(body.merchantTransactionId);
     if (body.merchantId !== undefined) data.merchantId = String(body.merchantId);
     if (body.email !== undefined) data.email = String(body.email ?? "");
@@ -34,17 +34,17 @@ export async function PATCH(req: NextRequest, context: any) {
 
     const updated = await prisma.slot.update({ where: { id }, data });
     return NextResponse.json(updated);
-  } catch (e: any) {
-    if (e?.code === "P2025") {
+  } catch (e: unknown) {
+    if ((e as { code?: string })?.code === "P2025") {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     return NextResponse.json({ error: "Failed to update slot" }, { status: 500 });
   }
 }
 
-export async function DELETE(_req: NextRequest, context: any) {
+export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const id = context?.params?.id as string | undefined;
+    const { id } = await context.params;
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
     const count = await prisma.booking.count({ where: { slotId: id } });
@@ -52,8 +52,8 @@ export async function DELETE(_req: NextRequest, context: any) {
 
     const deleted = await prisma.slot.delete({ where: { id } });
     return NextResponse.json(deleted);
-  } catch (e: any) {
-    if (e?.code === "P2025") {
+  } catch (e: unknown) {
+    if ((e as { code?: string })?.code === "P2025") {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     return NextResponse.json({ error: "Failed to delete slot" }, { status: 500 });

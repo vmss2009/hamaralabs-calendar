@@ -1,7 +1,7 @@
 // app/api/bookings/route.ts
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
-import { isBefore, parseISO } from "date-fns";
+import { isBefore } from "date-fns";
 
 // Helper: build a UTC midnight from yyyy-MM-dd
 function utcMidnightFromYMD(ymd: string) {
@@ -153,7 +153,7 @@ export async function POST(req: Request) {
       
       // Optional external phone call trigger based on user metadata
       try {
-        const callOnBook = (user as any)?.metadata?.callOnBook === true;
+        const callOnBook = (user.metadata as Record<string, unknown>)?.callOnBook === true;
         if (callOnBook) {
           await fetch("https://us-central1-hamaralabs-prod.cloudfunctions.net/phoneCall/call").catch(() => {});
         }
@@ -163,7 +163,7 @@ export async function POST(req: Request) {
       }
 
       return NextResponse.json({ booking }, { status: 201 });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Booking error:", err);
       return NextResponse.json({ message: "Failed to create booking" }, { status: 500 });
     }

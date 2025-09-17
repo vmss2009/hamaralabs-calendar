@@ -1,6 +1,6 @@
 "use client";
 
-import { format, isBefore, startOfDay, startOfWeek, getDay, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isToday, isSameDay } from "date-fns";
+import { format, isBefore, startOfDay, startOfWeek, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isToday, isSameDay } from "date-fns";
 import { useEffect, useState, useCallback, useMemo, use } from "react";
 import { toast } from "@/components/ui/use-toast";
 
@@ -25,7 +25,6 @@ function PublicCalendar({ selectedDate, onDateSelect, schedules, userName }: Pub
   const today = startOfDay(new Date());
   
   const monthStart = startOfMonth(viewDate);
-  const monthEnd = endOfMonth(viewDate);
   const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 });
   const calendarEnd = startOfWeek(endOfMonth(viewDate), { weekStartsOn: 0 });
   
@@ -249,7 +248,7 @@ interface Schedule {
 export default function SchedulePage({ params }: SchedulePageProps) {
   const { username } = use(params);
 
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<{ id: string; username: string; name?: string; email?: string; isPublic: boolean } | null>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -289,7 +288,7 @@ export default function SchedulePage({ params }: SchedulePageProps) {
         const schedulesData = await schedulesResponse.json();
 
         const formatted = schedulesData
-          .map((s: any) => ({
+          .map((s: { id: string; userId: string; date: string; timeSlots: TimeSlot[]; createdAt: string; updatedAt: string }) => ({
             ...s,
             date: new Date(s.date),
             createdAt: new Date(s.createdAt),
@@ -370,7 +369,7 @@ export default function SchedulePage({ params }: SchedulePageProps) {
   const schedulesResponse = await fetch(`/api/schedules/public/${username}?leadMinutes=30`);
       const schedulesData = await schedulesResponse.json();
       const formatted = schedulesData
-        .map((s: any) => ({
+        .map((s: { id: string; userId: string; date: string; timeSlots: TimeSlot[]; createdAt: string; updatedAt: string }) => ({
           ...s,
           date: new Date(s.date),
           createdAt: new Date(s.createdAt),
@@ -383,8 +382,9 @@ export default function SchedulePage({ params }: SchedulePageProps) {
       setGuestName("");
       setGuestEmail("");
       setNotes("");
-    } catch (e: any) {
-      toast({ title: "Couldn’t book", description: e.message, variant: "destructive" });
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "An unknown error occurred";
+      toast({ title: "Couldn't book", description: message, variant: "destructive" });
     } finally {
       setIsBooking(false);
     }

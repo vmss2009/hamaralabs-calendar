@@ -2,6 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import prisma from "@/lib/db/prisma";
 
+// Type definitions
+interface TimeSlotInput {
+  startTime: string;
+  endTime: string;
+  maxSlots: number;
+}
+
+interface ScheduleRequestBody {
+  date: string;
+  timeSlots: TimeSlotInput[];
+  userId: string;
+  replicateDates?: string[];
+}
+
 // GET /api/schedules - Get schedules for a specific date and user
 export async function GET(request: NextRequest) {
   try {
@@ -26,7 +40,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
-    let whereClause: any = {
+    const whereClause: { userId: string; date?: Date | { gte: Date; lte: Date } } = {
       userId,
     };
     
@@ -73,7 +87,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
-    const body = await request.json();
+    const body: ScheduleRequestBody = await request.json();
     const { date, timeSlots, userId, replicateDates } = body;
     
     if (!date || !timeSlots || !userId) {
@@ -95,7 +109,7 @@ export async function POST(request: NextRequest) {
     const datesToUpdate = replicateDates && Array.isArray(replicateDates) ? 
       [date, ...replicateDates] : [date];
     
-    const schedules = [];
+    const schedules: Array<{ id: string; date: Date; timeSlots: Array<{ id: string; startTime: string; endTime: string; maxSlots: number; bookedSlots: number }> }> = [];
     
     // Use a single transaction to handle all operations efficiently
     await prisma.$transaction(async (tx) => {
@@ -144,7 +158,7 @@ export async function POST(request: NextRequest) {
           
           // Create new time slots
           await tx.timeSlot.createMany({
-            data: timeSlots.map((slot: any) => ({
+            data: timeSlots.map((slot: TimeSlotInput) => ({
               scheduleId: existingSchedule.id,
               startTime: slot.startTime,
               endTime: slot.endTime,
@@ -177,24 +191,22 @@ export async function POST(request: NextRequest) {
           }
           
           // Batch update time slot booked counts
-          const updatePromises = Array.from(timeSlotUpdates.entries()).map(([slotId, count]) =>
+          const timeSlotUpdatePromises = Array.from(timeSlotUpdates.entries()).map(([slotId, count]) =>
             tx.timeSlot.update({
               where: { id: slotId },
               data: { bookedSlots: count }
             })
           );
           
+          await Promise.all(timeSlotUpdatePromises);
+          
           // Batch cancel bookings that no longer fit
           if (bookingsToCancel.length > 0) {
-            updatePromises.push(
-              tx.booking.updateMany({
-                where: { id: { in: bookingsToCancel } },
-                data: { status: 'CANCELED' }
-              })
-            );
+            await tx.booking.updateMany({
+              where: { id: { in: bookingsToCancel } },
+              data: { status: 'CANCELED' }
+            });
           }
-          
-          await Promise.all(updatePromises);
           
           schedule = await tx.schedule.findUnique({
             where: { id: existingSchedule.id },
@@ -207,7 +219,7 @@ export async function POST(request: NextRequest) {
               userId,
               date: currentDateObj,
               timeSlots: {
-                create: timeSlots.map((slot: any) => ({
+                create: timeSlots.map((slot: TimeSlotInput) => ({
                   startTime: slot.startTime,
                   endTime: slot.endTime,
                   maxSlots: slot.maxSlots,
@@ -225,7 +237,9 @@ export async function POST(request: NextRequest) {
           });
         }
         
-        schedules.push(schedule);
+        if (schedule) {
+          schedules.push(schedule);
+        }
       }
     });
     

@@ -14,10 +14,10 @@ function startOfDayIST(date: Date): Date {
 
 export async function GET(
   request: NextRequest,
-  { params }: any
+  { params }: { params: Promise<{ username: string }> }
 ) {
   try {
-    const { username } = params;
+    const { username } = await params;
     const url = new URL(request.url);
     const leadMinutesParam = url.searchParams.get("leadMinutes");
     // Default 30 minute lead if not provided
@@ -26,7 +26,7 @@ export async function GET(
     const todayStart = startOfDayIST(now); // IST day boundary in UTC timeline
 
     // Find the user by username
-    const user = await (prisma.user as any).findUnique({ where: { username } });
+    const user = await prisma.user.findUnique({ where: { username } });
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });

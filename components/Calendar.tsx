@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { format, parse, startOfWeek, getDay, isBefore, startOfDay, isSameDay, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, getWeek, isToday, getDaysInMonth } from "date-fns";
+import { format, startOfWeek, isBefore, startOfDay, isSameDay, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isToday } from "date-fns";
 import { useRouter } from "next/navigation";
 import { toast } from "@/components/ui/use-toast";
-import { enUS } from "date-fns/locale";
 
 // Utility function to convert 24-hour format to 12-hour format
 function formatTimeTo12Hour(time24: string): string {
@@ -46,7 +45,6 @@ function ModernCalendar({ selectedDate, onDateSelect, schedules, onMonthChange, 
   const today = startOfDay(new Date());
   
   const monthStart = startOfMonth(viewDate);
-  const monthEnd = endOfMonth(viewDate);
   const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 });
   const calendarEnd = startOfWeek(endOfMonth(viewDate), { weekStartsOn: 0 });
   
@@ -289,7 +287,6 @@ function ReplicationCalendar({ selectedDates, onDateToggle, currentDate }: Repli
   const monthStart = startOfMonth(viewDate);
   const monthEnd = endOfMonth(viewDate);
   const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 }); // Start on Sunday
-  const calendarEnd = addMonths(monthEnd, 0);
   
   const days = eachDayOfInterval({ start: calendarStart, end: monthEnd });
   
@@ -430,7 +427,6 @@ export default function Calendar({ userId }: CalendarProps) {
   const [isFormOpen, setIsFormOpen] = useState(true);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [monthlySchedules, setMonthlySchedules] = useState<Schedule[]>([]);
-  const [currentViewMonth, setCurrentViewMonth] = useState<string>('');
   const [monthlySchedulesLoading, setMonthlySchedulesLoading] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -464,7 +460,7 @@ export default function Calendar({ userId }: CalendarProps) {
         setSchedules(data);
         setSelectedTimeSlots(data.length > 0 ? data[0].timeSlots : []);
       }
-    } catch (error) {
+    } catch {
       toast({ title: "Error", description: "Failed to fetch your schedule", variant: "destructive" });
     } finally {
       setIsLoading(false);
@@ -475,12 +471,8 @@ export default function Calendar({ userId }: CalendarProps) {
   const fetchMonthlySchedules = useCallback(async (month: Date) => {
     try {
       setMonthlySchedulesLoading(true);
-      const monthKey = format(month, 'yyyy-MM');
       const monthStart = format(startOfMonth(month), "yyyy-MM-dd");
       const monthEnd = format(endOfMonth(month), "yyyy-MM-dd");
-      
-      // Update current view month tracker
-      setCurrentViewMonth(monthKey);
       
       // Use the range API that we updated earlier
       const response = await fetch(`/api/schedules?userId=${userId}&startDate=${monthStart}&endDate=${monthEnd}`);
@@ -517,7 +509,7 @@ export default function Calendar({ userId }: CalendarProps) {
       
       const data = await response.json();
       const schedules = data
-        .map((schedule: any) => ({
+        .map((schedule: { id: string; date: string; timeSlots: TimeSlot[] }) => ({
           ...schedule,
           date: new Date(schedule.date)
         }))
@@ -560,7 +552,7 @@ export default function Calendar({ userId }: CalendarProps) {
       fetchSchedules(selectedDate);
       // Update monthly schedules to reflect the restored slot in calendar view
       fetchMonthlySchedules(selectedDate);
-    } catch (e) {
+    } catch {
       toast({ title: "Error", description: "Failed to delete booking", variant: "destructive" });
     }
   };

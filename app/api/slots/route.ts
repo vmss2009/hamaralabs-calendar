@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
       prisma.slot.count(),
     ]);
     return NextResponse.json({ data, total, skip, take });
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: "Failed to fetch slots" }, { status: 500 });
   }
 }
@@ -53,8 +53,8 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json(created, { status: 201 });
-  } catch (e: any) {
-    if (e?.code === "P2002") {
+  } catch (e: unknown) {
+    if ((e as { code?: string })?.code === "P2002") {
       return NextResponse.json({ error: "merchantTransactionId must be unique" }, { status: 409 });
     }
     return NextResponse.json({ error: "Failed to create slot" }, { status: 500 });

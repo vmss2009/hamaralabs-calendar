@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
 import { auth } from "@/lib/auth/auth";
-import { startOfDay } from "date-fns";
 
-export async function DELETE(_req: NextRequest, { params }: { params: any }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const booking = await prisma.booking.findUnique({
       where: { id },
       select: { id: true, userId: true, date: true, startTime: true, endTime: true },
@@ -33,32 +32,30 @@ export async function DELETE(_req: NextRequest, { params }: { params: any }) {
       }
     });
 
-    const ops: any[] = [];
-    
-    // Delete the booking
-    ops.push(prisma.booking.delete({ where: { id: booking.id } }));
+    const deleteBooking = prisma.booking.delete({ where: { id: booking.id } });
     
     // Decrement the booked slots count if schedule and time slot exist
     if (schedule && schedule.timeSlots.length > 0) {
       const timeSlot = schedule.timeSlots[0];
-      ops.push(prisma.timeSlot.update({
+      const updateTimeSlot = prisma.timeSlot.update({
         where: { id: timeSlot.id },
         data: {
           bookedSlots: {
             decrement: 1
           }
         }
-      }));
+      });
+      await prisma.$transaction([deleteBooking, updateTimeSlot]);
+    } else {
+      await deleteBooking;
     }
-
-    await prisma.$transaction(ops);
 
     return NextResponse.json({ 
       success: true, 
       restoredSlot: `${booking.startTime}-${booking.endTime}` 
     });
-  } catch (e) {
-    console.error("Delete booking failed", e);
+  } catch (error: unknown) {
+    console.error("Delete booking failed", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
