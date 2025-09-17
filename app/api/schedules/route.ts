@@ -13,10 +13,12 @@ export async function GET(request: NextRequest) {
     
     const searchParams = request.nextUrl.searchParams;
     const date = searchParams.get("date");
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
     const userId = searchParams.get("userId");
     
-    if (!date || !userId) {
-      return NextResponse.json({ error: "Missing required parameters" }, { status: 400 });
+    if (!userId) {
+      return NextResponse.json({ error: "Missing userId parameter" }, { status: 400 });
     }
     
     // Ensure the user can only access their own schedules
@@ -24,17 +26,34 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
+    let whereClause: any = {
+      userId,
+    };
+    
+    if (date) {
+      // Single date query (existing behavior)
+      whereClause.date = new Date(date);
+    } else if (startDate && endDate) {
+      // Date range query (new functionality)
+      whereClause.date = {
+        gte: new Date(startDate),
+        lte: new Date(endDate),
+      };
+    } else {
+      return NextResponse.json({ error: "Either date or startDate+endDate must be provided" }, { status: 400 });
+    }
+    
     const schedules = await prisma.schedule.findMany({
-      where: {
-        userId,
-        date: new Date(date),
-      },
+      where: whereClause,
       include: {
         timeSlots: {
           orderBy: {
             startTime: 'asc'
           }
         }
+      },
+      orderBy: {
+        date: 'asc'
       }
     });
     

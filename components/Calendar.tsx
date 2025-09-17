@@ -29,9 +29,10 @@ interface ModernCalendarProps {
   selectedDate: Date | null;
   onDateSelect: (date: Date) => void;
   schedules: Schedule[];
+  onMonthChange?: (month: Date) => void;
 }
 
-function ModernCalendar({ selectedDate, onDateSelect, schedules }: ModernCalendarProps) {
+function ModernCalendar({ selectedDate, onDateSelect, schedules, onMonthChange }: ModernCalendarProps) {
   const [viewDate, setViewDate] = useState(new Date());
   const today = startOfDay(new Date());
   
@@ -46,28 +47,46 @@ function ModernCalendar({ selectedDate, onDateSelect, schedules }: ModernCalenda
     end: new Date(calendarEnd.getTime() + 6 * 24 * 60 * 60 * 1000) 
   });
   
-  const previousMonth = () => setViewDate(subMonths(viewDate, 1));
-  const nextMonth = () => setViewDate(addMonths(viewDate, 1));
+  const previousMonth = () => {
+    const newDate = subMonths(viewDate, 1);
+    setViewDate(newDate);
+    onMonthChange?.(newDate);
+  };
+  const nextMonth = () => {
+    const newDate = addMonths(viewDate, 1);
+    setViewDate(newDate);
+    onMonthChange?.(newDate);
+  };
   const goToToday = () => {
-    setViewDate(new Date());
+    const newDate = new Date();
+    setViewDate(newDate);
+    onMonthChange?.(newDate);
     onDateSelect(today);
   };
   
+  // Call onMonthChange when component mounts
+  useEffect(() => {
+    onMonthChange?.(viewDate);
+  }, []); // Only on mount
+  
   // Check if a date has schedules
   const hasSchedule = (date: Date) => {
-    return schedules.some(schedule => 
-      format(schedule.date, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd') &&
-      schedule.timeSlots.length > 0
-    );
+    const dateStr = format(date, 'yyyy-MM-dd');
+    const schedule = schedules.find(s => {
+      const scheduleDate = s.date instanceof Date ? s.date : new Date(s.date);
+      return format(scheduleDate, 'yyyy-MM-dd') === dateStr;
+    });
+    return schedule && schedule.timeSlots && schedule.timeSlots.length > 0;
   };
   
   // Get schedule for a date
   const getScheduleInfo = (date: Date) => {
-    const schedule = schedules.find(s => 
-      format(s.date, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd') &&
-      s.timeSlots.length > 0
-    );
-    return schedule;
+    const dateStr = format(date, 'yyyy-MM-dd');
+    const schedule = schedules.find(s => {
+      const scheduleDate = s.date instanceof Date ? s.date : new Date(s.date);
+      return format(scheduleDate, 'yyyy-MM-dd') === dateStr;
+    });
+    return (schedule && schedule.timeSlots && schedule.timeSlots.length > 0) ? schedule : null;
   };
   
   return (
@@ -386,6 +405,7 @@ export default function Calendar({ userId }: CalendarProps) {
   const [selectedTimeSlots, setSelectedTimeSlots] = useState<TimeSlot[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(true);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [monthlySchedules, setMonthlySchedules] = useState<Schedule[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
@@ -402,6 +422,7 @@ export default function Calendar({ userId }: CalendarProps) {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [isBookingsLoading, setIsBookingsLoading] = useState(false);
 
+  // Fetch schedules for a specific date (for editing)
   const fetchSchedules = useCallback(async (date: Date) => {
     try {
       setIsLoading(true);
@@ -421,6 +442,61 @@ export default function Calendar({ userId }: CalendarProps) {
       toast({ title: "Error", description: "Failed to fetch your schedule", variant: "destructive" });
     } finally {
       setIsLoading(false);
+    }
+  }, [userId]);
+  
+  // Fetch all schedules for a given month (for calendar display)
+  const fetchMonthlySchedules = useCallback(async (month: Date) => {
+    try {
+      const monthStart = format(startOfMonth(month), "yyyy-MM-dd");
+      const monthEnd = format(endOfMonth(month), "yyyy-MM-dd");
+      
+      // For now, we'll use the existing API but make fewer calls
+      // In the future, we could create a month-range API endpoint
+      const response = await fetch(`/api/schedules?userId=${userId}&startDate=${monthStart}&endDate=${monthEnd}`);
+      
+      if (!response.ok) {
+        // Fallback: try to fetch a few key dates if the range API doesn't exist
+        console.warn('Month range API not available, fetching individual dates');
+        const keyDates = [];
+        const start = startOfMonth(month);
+        const end = endOfMonth(month);
+        
+        // Sample a few dates throughout the month to reduce API calls
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 3)) {
+          keyDates.push(format(d, "yyyy-MM-dd"));
+        }
+        
+        const promises = keyDates.map(dateStr => 
+          fetch(`/api/schedules?date=${dateStr}&userId=${userId}`)
+            .then(res => res.ok ? res.json() : [])
+            .catch(() => [])
+        );
+        
+        const results = await Promise.all(promises);
+        const schedules = results.flat()
+          .map(schedule => ({
+            ...schedule,
+            date: new Date(schedule.date)
+          }))
+          .filter(schedule => schedule.timeSlots?.length > 0);
+          
+        setMonthlySchedules(schedules);
+        return;
+      }
+      
+      const data = await response.json();
+      const schedules = data
+        .map((schedule: any) => ({
+          ...schedule,
+          date: new Date(schedule.date)
+        }))
+        .filter((schedule: Schedule) => schedule.timeSlots?.length > 0);
+        
+      setMonthlySchedules(schedules);
+    } catch (error) {
+      console.error("Failed to fetch monthly schedules:", error);
+      setMonthlySchedules([]);
     }
   }, [userId]);
 
@@ -471,6 +547,11 @@ export default function Calendar({ userId }: CalendarProps) {
       fetchBookings(selectedDate);
     }
   }, [selectedDate, fetchSchedules, fetchBookings]);
+  
+  // Fetch monthly schedules when component mounts
+  useEffect(() => {
+    fetchMonthlySchedules(new Date());
+  }, [fetchMonthlySchedules]);
 
   const addTimeSlot = () => {
     if (!newSlotStart || !newSlotEnd || newSlotMaxSlots < 1) {
@@ -608,7 +689,8 @@ export default function Calendar({ userId }: CalendarProps) {
           <ModernCalendar 
             selectedDate={selectedDate}
             onDateSelect={handleDateSelect}
-            schedules={schedules}
+            schedules={monthlySchedules}
+            onMonthChange={fetchMonthlySchedules}
           />
         </div>
       </div>
