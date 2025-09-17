@@ -38,9 +38,10 @@ interface ModernCalendarProps {
   onDateSelect: (date: Date) => void;
   schedules: Schedule[];
   onMonthChange?: (month: Date) => void;
+  isLoading?: boolean;
 }
 
-function ModernCalendar({ selectedDate, onDateSelect, schedules, onMonthChange }: ModernCalendarProps) {
+function ModernCalendar({ selectedDate, onDateSelect, schedules, onMonthChange, isLoading }: ModernCalendarProps) {
   const [viewDate, setViewDate] = useState(new Date());
   const today = startOfDay(new Date());
   
@@ -72,10 +73,10 @@ function ModernCalendar({ selectedDate, onDateSelect, schedules, onMonthChange }
     onDateSelect(today);
   };
   
-  // Call onMonthChange when component mounts
+  // Call onMonthChange when component mounts or viewDate changes
   useEffect(() => {
     onMonthChange?.(viewDate);
-  }, []); // Only on mount
+  }, [viewDate, onMonthChange]); // Update when viewDate changes
   
   // Check if a date has schedules
   const hasSchedule = (date: Date) => {
@@ -112,9 +113,14 @@ function ModernCalendar({ selectedDate, onDateSelect, schedules, onMonthChange }
       {/* Calendar Header */}
       <div className="flex items-center justify-between mb-6 px-2">
         <div>
-          <h2 className="text-2xl font-bold">
-            {format(viewDate, 'MMMM yyyy')}
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-2xl font-bold">
+              {format(viewDate, 'MMMM yyyy')}
+            </h2>
+            {isLoading && (
+              <div className="w-4 h-4 rounded-full border-2 border-gray-300 border-t-blue-500 animate-spin" />
+            )}
+          </div>
           <p className="text-sm opacity-60 mt-1">
             Select a date to manage your schedule
           </p>
@@ -424,6 +430,8 @@ export default function Calendar({ userId }: CalendarProps) {
   const [isFormOpen, setIsFormOpen] = useState(true);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [monthlySchedules, setMonthlySchedules] = useState<Schedule[]>([]);
+  const [currentViewMonth, setCurrentViewMonth] = useState<string>('');
+  const [monthlySchedulesLoading, setMonthlySchedulesLoading] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
@@ -466,11 +474,15 @@ export default function Calendar({ userId }: CalendarProps) {
   // Fetch all schedules for a given month (for calendar display)
   const fetchMonthlySchedules = useCallback(async (month: Date) => {
     try {
+      setMonthlySchedulesLoading(true);
+      const monthKey = format(month, 'yyyy-MM');
       const monthStart = format(startOfMonth(month), "yyyy-MM-dd");
       const monthEnd = format(endOfMonth(month), "yyyy-MM-dd");
       
-      // For now, we'll use the existing API but make fewer calls
-      // In the future, we could create a month-range API endpoint
+      // Update current view month tracker
+      setCurrentViewMonth(monthKey);
+      
+      // Use the range API that we updated earlier
       const response = await fetch(`/api/schedules?userId=${userId}&startDate=${monthStart}&endDate=${monthEnd}`);
       
       if (!response.ok) {
@@ -515,6 +527,8 @@ export default function Calendar({ userId }: CalendarProps) {
     } catch (error) {
       console.error("Failed to fetch monthly schedules:", error);
       setMonthlySchedules([]);
+    } finally {
+      setMonthlySchedulesLoading(false);
     }
   }, [userId]);
 
@@ -544,6 +558,8 @@ export default function Calendar({ userId }: CalendarProps) {
       // Refresh bookings and schedules (slot restored)
       fetchBookings(selectedDate);
       fetchSchedules(selectedDate);
+      // Update monthly schedules to reflect the restored slot in calendar view
+      fetchMonthlySchedules(selectedDate);
     } catch (e) {
       toast({ title: "Error", description: "Failed to delete booking", variant: "destructive" });
     }
@@ -626,6 +642,41 @@ export default function Calendar({ userId }: CalendarProps) {
       toast({ title: "Cannot edit past dates", description: "You can only edit today's and future dates", variant: "destructive" });
       return;
     }
+    
+    // Check for existing schedules on replication dates
+    if (selectedReplicationDates.length > 0) {
+      const datesWithExistingSchedules = [];
+      
+      // Check each replication date for existing schedules
+      for (const dateStr of selectedReplicationDates) {
+        const schedule = monthlySchedules.find(s => {
+          const scheduleDate = s.date instanceof Date ? s.date : new Date(s.date);
+          return format(scheduleDate, 'yyyy-MM-dd') === dateStr;
+        });
+        
+        if (schedule && schedule.timeSlots && schedule.timeSlots.length > 0) {
+          datesWithExistingSchedules.push(dateStr);
+        }
+      }
+      
+      // Show confirmation dialog if there are dates with existing schedules
+      if (datesWithExistingSchedules.length > 0) {
+        const formattedDates = datesWithExistingSchedules
+          .map(dateStr => format(new Date(dateStr), 'MMM d, yyyy'))
+          .join(', ');
+        
+        const message = datesWithExistingSchedules.length === 1 
+          ? `The date ${formattedDates} already has a schedule that will be completely overwritten.`
+          : `The following dates already have schedules that will be completely overwritten: ${formattedDates}.`;
+        
+        const confirmMessage = `${message}\n\nAny existing bookings on these dates that don't match the new time slots will be automatically cancelled.\n\nDo you want to continue?`;
+        
+        const confirmed = typeof window !== 'undefined' ? window.confirm(confirmMessage) : false;
+        if (!confirmed) {
+          return; // User cancelled, don't proceed
+        }
+      }
+    }
     try {
       setIsLoading(true);
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
@@ -654,6 +705,16 @@ export default function Calendar({ userId }: CalendarProps) {
         title: "Success", 
         description: data.message || "Your schedule has been updated" 
       });
+      
+      // Refresh monthly schedules to update calendar display immediately
+      // This will show the updated slot counts in real-time
+      const currentViewDate = selectedDate || new Date();
+      fetchMonthlySchedules(currentViewDate);
+      
+      // Force immediate update of the current date's schedule data
+      if (selectedDate) {
+        fetchSchedules(selectedDate);
+      }
       
       if (selectedTimeSlots.length === 0) {
         // Cleared schedule: show editor state as unscheduled
@@ -709,6 +770,7 @@ export default function Calendar({ userId }: CalendarProps) {
             onDateSelect={handleDateSelect}
             schedules={monthlySchedules}
             onMonthChange={fetchMonthlySchedules}
+            isLoading={monthlySchedulesLoading}
           />
         </div>
       </div>

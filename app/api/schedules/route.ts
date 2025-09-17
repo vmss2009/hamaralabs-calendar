@@ -97,73 +97,137 @@ export async function POST(request: NextRequest) {
     
     const schedules = [];
     
-    // Process each date
-    for (const currentDate of datesToUpdate) {
-      // Check if a schedule already exists for this date
-      const existingSchedule = await prisma.schedule.findUnique({
+    // Use a single transaction to handle all operations efficiently
+    await prisma.$transaction(async (tx) => {
+      // Fetch all existing schedules and bookings in batch
+      const existingSchedules = await tx.schedule.findMany({
         where: {
-          userId_date: {
-            userId,
-            date: new Date(currentDate),
-          },
+          userId,
+          date: {
+            in: datesToUpdate.map(d => new Date(d))
+          }
         },
         include: {
           timeSlots: true
         }
       });
       
-      let schedule;
-      
-      if (existingSchedule) {
-        // Delete existing time slots and create new ones
-        await prisma.timeSlot.deleteMany({
-          where: {
-            scheduleId: existingSchedule.id
-          }
-        });
-        
-        // Create new time slots
-        await prisma.timeSlot.createMany({
-          data: timeSlots.map((slot: any) => ({
-            scheduleId: existingSchedule.id,
-            startTime: slot.startTime,
-            endTime: slot.endTime,
-            maxSlots: slot.maxSlots,
-            bookedSlots: 0
-          }))
-        });
-        
-        schedule = await prisma.schedule.findUnique({
-          where: { id: existingSchedule.id },
-          include: { timeSlots: { orderBy: { startTime: 'asc' } } }
-        });
-      } else {
-        // Create new schedule with time slots
-        schedule = await prisma.schedule.create({
-          data: {
-            userId,
-            date: new Date(currentDate),
-            timeSlots: {
-              create: timeSlots.map((slot: any) => ({
-                startTime: slot.startTime,
-                endTime: slot.endTime,
-                maxSlots: slot.maxSlots,
-                bookedSlots: 0
-              }))
-            }
+      const existingBookings = await tx.booking.findMany({
+        where: {
+          userId,
+          date: {
+            in: datesToUpdate.map(d => new Date(d))
           },
-          include: {
-            timeSlots: {
-              orderBy: {
-                startTime: 'asc'
+          status: { not: 'CANCELED' }
+        }
+      });
+      
+      // Process each date
+      for (const currentDate of datesToUpdate) {
+        const currentDateObj = new Date(currentDate);
+        const existingSchedule = existingSchedules.find(s => 
+          s.date.getTime() === currentDateObj.getTime()
+        );
+        const dateBookings = existingBookings.filter(b => 
+          b.date.getTime() === currentDateObj.getTime()
+        );
+        
+        let schedule;
+        
+        if (existingSchedule) {
+          // Delete existing time slots
+          await tx.timeSlot.deleteMany({
+            where: {
+              scheduleId: existingSchedule.id
+            }
+          });
+          
+          // Create new time slots
+          await tx.timeSlot.createMany({
+            data: timeSlots.map((slot: any) => ({
+              scheduleId: existingSchedule.id,
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+              maxSlots: slot.maxSlots,
+              bookedSlots: 0
+            }))
+          });
+          
+          // Get the newly created time slots
+          const newTimeSlots = await tx.timeSlot.findMany({
+            where: { scheduleId: existingSchedule.id },
+            orderBy: { startTime: 'asc' }
+          });
+          
+          // Process bookings and update slot counts in batches
+          const timeSlotUpdates = new Map();
+          const bookingsToCancel = [];
+          
+          for (const booking of dateBookings) {
+            const matchingTimeSlot = newTimeSlots.find(ts => 
+              ts.startTime === booking.startTime && ts.endTime === booking.endTime
+            );
+            
+            if (matchingTimeSlot) {
+              const currentCount = timeSlotUpdates.get(matchingTimeSlot.id) || 0;
+              timeSlotUpdates.set(matchingTimeSlot.id, currentCount + 1);
+            } else {
+              bookingsToCancel.push(booking.id);
+            }
+          }
+          
+          // Batch update time slot booked counts
+          const updatePromises = Array.from(timeSlotUpdates.entries()).map(([slotId, count]) =>
+            tx.timeSlot.update({
+              where: { id: slotId },
+              data: { bookedSlots: count }
+            })
+          );
+          
+          // Batch cancel bookings that no longer fit
+          if (bookingsToCancel.length > 0) {
+            updatePromises.push(
+              tx.booking.updateMany({
+                where: { id: { in: bookingsToCancel } },
+                data: { status: 'CANCELED' }
+              })
+            );
+          }
+          
+          await Promise.all(updatePromises);
+          
+          schedule = await tx.schedule.findUnique({
+            where: { id: existingSchedule.id },
+            include: { timeSlots: { orderBy: { startTime: 'asc' } } }
+          });
+        } else {
+          // Create new schedule with time slots
+          schedule = await tx.schedule.create({
+            data: {
+              userId,
+              date: currentDateObj,
+              timeSlots: {
+                create: timeSlots.map((slot: any) => ({
+                  startTime: slot.startTime,
+                  endTime: slot.endTime,
+                  maxSlots: slot.maxSlots,
+                  bookedSlots: 0
+                }))
+              }
+            },
+            include: {
+              timeSlots: {
+                orderBy: {
+                  startTime: 'asc'
+                }
               }
             }
-          }
-        });
+          });
+        }
+        
+        schedules.push(schedule);
       }
-      
-      schedules.push(schedule);
-    }
+    });
     
     return NextResponse.json({ 
       schedules, 
