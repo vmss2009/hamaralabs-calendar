@@ -1,29 +1,229 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { Calendar as BigCalendar, dateFnsLocalizer, SlotInfo } from "react-big-calendar";
-import { format, parse, startOfWeek, getDay, isBefore, startOfDay, isSameDay, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, getWeek, isToday } from "date-fns";
-import "react-big-calendar/lib/css/react-big-calendar.css";
+import { format, parse, startOfWeek, getDay, isBefore, startOfDay, isSameDay, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, getWeek, isToday, getDaysInMonth } from "date-fns";
 import { useRouter } from "next/navigation";
 import { toast } from "@/components/ui/use-toast";
 import { enUS } from "date-fns/locale";
 
-const locales = { "en-US": enUS };
-
-const localizer = dateFnsLocalizer({
-  format,
-  parse,
-  startOfWeek: startOfWeek as any,
-  getDay,
-  locales: locales as any,
-} as any);
-
+// Forward declarations
 interface TimeSlot {
   id?: string;
   startTime: string;
   endTime: string;
   maxSlots: number;
   bookedSlots: number;
+}
+
+interface Schedule {
+  id: string; 
+  userId: string; 
+  date: Date; 
+  timeSlots: TimeSlot[]; 
+  createdAt: Date; 
+  updatedAt: Date;
+}
+
+// Custom Modern Calendar Component
+interface ModernCalendarProps {
+  selectedDate: Date | null;
+  onDateSelect: (date: Date) => void;
+  schedules: Schedule[];
+}
+
+function ModernCalendar({ selectedDate, onDateSelect, schedules }: ModernCalendarProps) {
+  const [viewDate, setViewDate] = useState(new Date());
+  const today = startOfDay(new Date());
+  
+  const monthStart = startOfMonth(viewDate);
+  const monthEnd = endOfMonth(viewDate);
+  const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 });
+  const calendarEnd = startOfWeek(endOfMonth(viewDate), { weekStartsOn: 0 });
+  
+  // Get all days to display (including previous/next month days to fill the grid)
+  const days = eachDayOfInterval({ 
+    start: calendarStart, 
+    end: new Date(calendarEnd.getTime() + 6 * 24 * 60 * 60 * 1000) 
+  });
+  
+  const previousMonth = () => setViewDate(subMonths(viewDate, 1));
+  const nextMonth = () => setViewDate(addMonths(viewDate, 1));
+  const goToToday = () => {
+    setViewDate(new Date());
+    onDateSelect(today);
+  };
+  
+  // Check if a date has schedules
+  const hasSchedule = (date: Date) => {
+    return schedules.some(schedule => 
+      format(schedule.date, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd') &&
+      schedule.timeSlots.length > 0
+    );
+  };
+  
+  // Get schedule for a date
+  const getScheduleInfo = (date: Date) => {
+    const schedule = schedules.find(s => 
+      format(s.date, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd') &&
+      s.timeSlots.length > 0
+    );
+    return schedule;
+  };
+  
+  return (
+    <div className="w-full">
+      {/* Calendar Header */}
+      <div className="flex items-center justify-between mb-6 px-2">
+        <div>
+          <h2 className="text-2xl font-bold">
+            {format(viewDate, 'MMMM yyyy')}
+          </h2>
+          <p className="text-sm opacity-60 mt-1">
+            Select a date to manage your schedule
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={goToToday}
+            className="px-3 py-1.5 text-sm rounded-lg border transition-colors"
+            style={{ 
+              borderColor: "color-mix(in srgb, var(--foreground) 20%, transparent)",
+              background: "color-mix(in srgb, var(--foreground) 5%, transparent)"
+            }}
+          >
+            Today
+          </button>
+          <div className="flex rounded-lg border overflow-hidden"
+               style={{ borderColor: "color-mix(in srgb, var(--foreground) 20%, transparent)" }}>
+            <button
+              onClick={previousMonth}
+              className="px-3 py-1.5 hover:bg-opacity-20 transition-colors"
+              style={{ background: "color-mix(in srgb, var(--foreground) 5%, transparent)" }}
+            >
+              ←
+            </button>
+            <button
+              onClick={nextMonth}
+              className="px-3 py-1.5 hover:bg-opacity-20 transition-colors border-l"
+              style={{ 
+                background: "color-mix(in srgb, var(--foreground) 5%, transparent)",
+                borderColor: "color-mix(in srgb, var(--foreground) 20%, transparent)"
+              }}
+            >
+              →
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      {/* Days of week header */}
+      <div className="grid grid-cols-7 mb-2">
+        {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(day => (
+          <div key={day} className="p-3 text-center">
+            <div className="text-sm font-medium opacity-70">
+              {day.slice(0, 3)}
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      {/* Calendar Grid */}
+      <div className="grid grid-cols-7 gap-1">
+        {days.map((day, dayIdx) => {
+          const isCurrentMonth = day.getMonth() === viewDate.getMonth();
+          const isPast = isBefore(day, today);
+          const isTodayDate = isToday(day);
+          const isSelected = selectedDate && isSameDay(day, selectedDate);
+          const hasScheduleData = hasSchedule(day);
+          const scheduleInfo = getScheduleInfo(day);
+          
+          return (
+            <button
+              key={dayIdx}
+              onClick={() => onDateSelect(day)}
+              className={`
+                relative h-20 p-2 rounded-lg transition-all duration-200 hover:scale-105
+                flex flex-col items-center justify-center
+                ${
+                  !isCurrentMonth 
+                    ? 'opacity-30' 
+                    : isPast 
+                      ? 'opacity-50' 
+                      : 'hover:shadow-md'
+                }
+              `}
+              style={{
+                background: isSelected
+                  ? 'var(--foreground)'
+                  : hasScheduleData
+                    ? 'color-mix(in srgb, var(--foreground) 12%, transparent)'
+                    : isTodayDate
+                      ? 'color-mix(in srgb, var(--foreground) 8%, transparent)'
+                      : 'color-mix(in srgb, var(--foreground) 3%, transparent)',
+                color: isSelected ? 'var(--background)' : 'var(--foreground)',
+                border: isTodayDate && !isSelected 
+                  ? '2px solid var(--foreground)' 
+                  : '1px solid color-mix(in srgb, var(--foreground) 15%, transparent)',
+              }}
+            >
+              {/* Date number */}
+              <div className={`text-lg font-semibold ${
+                isSelected ? 'text-current' : isTodayDate ? 'font-bold' : ''
+              }`}>
+                {format(day, 'd')}
+              </div>
+              
+              {/* Schedule indicator */}
+              {hasScheduleData && (
+                <div className="mt-1 flex flex-col items-center">
+                  <div className={`w-2 h-2 rounded-full ${
+                    isSelected 
+                      ? 'bg-current opacity-70'
+                      : 'bg-green-500'
+                  }`} />
+                  <div className={`text-xs mt-0.5 ${
+                    isSelected ? 'text-current opacity-80' : 'opacity-70'
+                  }`}>
+                    {scheduleInfo?.timeSlots.length} slots
+                  </div>
+                </div>
+              )}
+              
+              {/* Today indicator */}
+              {isTodayDate && (
+                <div className="absolute top-1 right-1">
+                  <div className={`w-2 h-2 rounded-full ${
+                    isSelected ? 'bg-current' : 'bg-blue-500'
+                  }`} />
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      
+      {/* Legend */}
+      <div className="flex flex-wrap gap-4 mt-6 px-2 text-sm">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded border-2" 
+               style={{ borderColor: 'var(--foreground)' }} />
+          <span>Today</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded" 
+               style={{ background: 'var(--foreground)' }} />
+          <span>Selected</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded flex items-center justify-center" 
+               style={{ background: 'color-mix(in srgb, var(--foreground) 12%, transparent)' }}>
+            <div className="w-2 h-2 rounded-full bg-green-500" />
+          </div>
+          <span>Has Schedule</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // Replication Calendar Component
@@ -163,23 +363,11 @@ function ReplicationCalendar({ selectedDates, onDateToggle, currentDate }: Repli
   );
 }
 
-// Allow day styling on RBC
-declare module "react-big-calendar" {
-  interface CalendarProps {
-    dayPropGetter?: (date: Date) => { className?: string; style?: React.CSSProperties };
-    className?: string;
-  }
+// Calendar component props
+interface CalendarProps { 
+  userId: string; 
 }
 
-interface CalendarProps { userId: string; }
-interface Schedule {
-  id: string; 
-  userId: string; 
-  date: Date; 
-  timeSlots: TimeSlot[]; 
-  createdAt: Date; 
-  updatedAt: Date;
-}
 interface Booking {
   id: string; 
   startTime: string;
@@ -267,8 +455,8 @@ export default function Calendar({ userId }: CalendarProps) {
     }
   };
 
-  const handleSelectSlot = useCallback((slotInfo: SlotInfo) => {
-    const selected = startOfDay(slotInfo.start);
+  const handleDateSelect = useCallback((date: Date) => {
+    const selected = startOfDay(date);
     setSelectedDate(selected);
     setIsFormOpen(true);
     setIsEditing(false);
@@ -413,50 +601,20 @@ export default function Calendar({ userId }: CalendarProps) {
   };
 
   return (
-    <div className="flex flex-col md:flex-row gap-6">
-      <div className="w-full md:w-2/3">
-        <div className="rounded-[14px] shadow-lg p-4 border"
+    <div className="flex flex-col lg:flex-row gap-6">
+      <div className="w-full lg:w-2/3">
+        <div className="rounded-xl shadow-lg p-6 border"
              style={{ background: "var(--background)", borderColor: "color-mix(in srgb, var(--foreground) 15%, transparent)" }}>
-          {/* @ts-ignore */}
-          <BigCalendar
-            localizer={localizer}
-            events={[]}
-            views={["month"] as any}
-            startAccessor="start"
-            endAccessor="end"
-            style={{ height: 600 }}
-            selectable
-            onSelectSlot={handleSelectSlot}
-            className="calendar-custom"
-            dayPropGetter={(date: Date) => {
-              const today = startOfDay(new Date());
-              const isPast = isBefore(date, today);
-              const isToday = isSameDay(date, today);
-              const isSelected = selectedDate ? isSameDay(date, selectedDate) : false;
-              let backgroundColor = "transparent";
-              if (isPast) backgroundColor = "color-mix(in srgb, var(--foreground) 6%, transparent)";
-              if (isToday) backgroundColor = "color-mix(in srgb, var(--foreground) 12%, transparent)";
-              if (isSelected) backgroundColor = "color-mix(in srgb, var(--foreground) 20%, transparent)";
-              return {
-                className: [
-                  isPast ? "past-date" : "",
-                  isToday ? "today-date" : "",
-                  isSelected ? "selected-date" : "",
-                ].filter(Boolean).join(" "),
-                style: {
-                  backgroundColor,
-                  border: isSelected ? "1px solid color-mix(in srgb, var(--foreground) 35%, transparent)" : undefined,
-                  borderRadius: 8,
-                  cursor: "pointer",
-                },
-              };
-            }}
+          <ModernCalendar 
+            selectedDate={selectedDate}
+            onDateSelect={handleDateSelect}
+            schedules={schedules}
           />
         </div>
       </div>
 
       {isFormOpen && selectedDate && (
-        <div className="w-full md:w-1/3 rounded-[14px] shadow-lg p-6 border"
+        <div className="w-full lg:w-1/3 rounded-xl shadow-lg p-6 border"
              style={{ background: "var(--background)", borderColor: "color-mix(in srgb, var(--foreground) 15%, transparent)" }}>
           <h2 className="text-xl font-semibold mb-4">
             {`Schedule for ${format(selectedDate, "MMMM d, yyyy")}`}
