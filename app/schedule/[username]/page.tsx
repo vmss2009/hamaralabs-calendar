@@ -4,6 +4,14 @@ import { format, isBefore, startOfDay, startOfWeek, getDay, addMonths, subMonths
 import { useEffect, useState, useCallback, useMemo, use } from "react";
 import { toast } from "@/components/ui/use-toast";
 
+// Utility function to convert 24-hour format to 12-hour format
+function formatTimeTo12Hour(time24: string): string {
+  const [hours, minutes] = time24.split(':').map(Number);
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const hours12 = hours % 12 || 12;
+  return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
+}
+
 // Public Calendar Component (similar to ModernCalendar but for public booking)
 interface PublicCalendarProps {
   selectedDate: Date | null;
@@ -356,7 +364,7 @@ export default function SchedulePage({ params }: SchedulePageProps) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j?.message || "Failed to book");
       }
-      toast({ title: "Booked!", description: `You're in for ${selectedSlot.startTime}-${selectedSlot.endTime}.` });
+      toast({ title: "Booked!", description: `You're in for ${formatTimeTo12Hour(selectedSlot.startTime)}-${formatTimeTo12Hour(selectedSlot.endTime)}.` });
 
       // refresh schedules so slot disappears
   const schedulesResponse = await fetch(`/api/schedules/public/${username}?leadMinutes=30`);
@@ -454,7 +462,7 @@ export default function SchedulePage({ params }: SchedulePageProps) {
                         }}
                       >
                         <div>
-                          <div className="font-medium">{slot.startTime}-{slot.endTime} IST</div>
+                          <div className="font-medium">{formatTimeTo12Hour(slot.startTime)}-{formatTimeTo12Hour(slot.endTime)}</div>
                           <div className="text-xs opacity-70">
                             {availableCount}/{slot.maxSlots} available
                           </div>
@@ -477,7 +485,7 @@ export default function SchedulePage({ params }: SchedulePageProps) {
                   <div className="mt-6 border-t pt-4"
                        style={{ borderColor: "color-mix(in srgb, var(--foreground) 15%, transparent)" }}>
                     <h3 className="font-semibold mb-3">
-                      Book {selectedSlot.startTime}-{selectedSlot.endTime} IST
+                      Book {formatTimeTo12Hour(selectedSlot.startTime)}-{formatTimeTo12Hour(selectedSlot.endTime)}
                     </h3>
                     <div className="space-y-3">
                       <input

@@ -6,6 +6,14 @@ import { useRouter } from "next/navigation";
 import { toast } from "@/components/ui/use-toast";
 import { enUS } from "date-fns/locale";
 
+// Utility function to convert 24-hour format to 12-hour format
+function formatTimeTo12Hour(time24: string): string {
+  const [hours, minutes] = time24.split(':').map(Number);
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const hours12 = hours % 12 || 12;
+  return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
+}
+
 // Forward declarations
 interface TimeSlot {
   id?: string;
@@ -89,6 +97,16 @@ function ModernCalendar({ selectedDate, onDateSelect, schedules, onMonthChange }
     return (schedule && schedule.timeSlots && schedule.timeSlots.length > 0) ? schedule : null;
   };
   
+  // Get total available slots for a date (sum of all time periods)
+  const getTotalAvailableSlots = (date: Date) => {
+    const schedule = getScheduleInfo(date);
+    if (!schedule) return 0;
+    
+    return schedule.timeSlots.reduce((total, slot) => {
+      return total + (slot.maxSlots - slot.bookedSlots);
+    }, 0);
+  };
+  
   return (
     <div className="w-full">
       {/* Calendar Header */}
@@ -154,7 +172,7 @@ function ModernCalendar({ selectedDate, onDateSelect, schedules, onMonthChange }
           const isTodayDate = isToday(day);
           const isSelected = selectedDate && isSameDay(day, selectedDate);
           const hasScheduleData = hasSchedule(day);
-          const scheduleInfo = getScheduleInfo(day);
+          const totalAvailableSlots = getTotalAvailableSlots(day);
           
           return (
             <button
@@ -193,7 +211,7 @@ function ModernCalendar({ selectedDate, onDateSelect, schedules, onMonthChange }
               </div>
               
               {/* Schedule indicator */}
-              {hasScheduleData && (
+              {hasScheduleData && totalAvailableSlots > 0 && (
                 <div className="mt-1 flex flex-col items-center">
                   <div className={`w-2 h-2 rounded-full ${
                     isSelected 
@@ -203,7 +221,7 @@ function ModernCalendar({ selectedDate, onDateSelect, schedules, onMonthChange }
                   <div className={`text-xs mt-0.5 ${
                     isSelected ? 'text-current opacity-80' : 'opacity-70'
                   }`}>
-                    {scheduleInfo?.timeSlots.length === 1 ? '1 slot' : `${scheduleInfo?.timeSlots.length} slots`}
+                    {totalAvailableSlots === 1 ? '1 slot' : `${totalAvailableSlots} slots`}
                   </div>
                 </div>
               )}
@@ -725,7 +743,7 @@ export default function Calendar({ userId }: CalendarProps) {
                          borderColor: "color-mix(in srgb, var(--foreground) 20%, transparent)",
                        }}>
                     <div className="flex items-center justify-between">
-                      <div className="font-semibold">{b.startTime}-{b.endTime}</div>
+                      <div className="font-semibold">{formatTimeTo12Hour(b.startTime)}-{formatTimeTo12Hour(b.endTime)}</div>
                       <span className="text-xs px-2 py-0.5 rounded-full"
                             style={{ background: "var(--foreground)", color: "var(--background)" }}>
                         {b.status.toLowerCase()}
@@ -763,7 +781,7 @@ export default function Calendar({ userId }: CalendarProps) {
                            borderColor: "color-mix(in srgb, var(--foreground) 20%, transparent)" 
                          }}>
                       <div className="flex items-center justify-between">
-                        <div className="font-medium">{slot.startTime}-{slot.endTime} IST</div>
+                        <div className="font-medium">{formatTimeTo12Hour(slot.startTime)}-{formatTimeTo12Hour(slot.endTime)}</div>
                         <div className="text-sm text-opacity-70">
                           {slot.maxSlots - slot.bookedSlots}/{slot.maxSlots} available
                         </div>
@@ -806,6 +824,7 @@ export default function Calendar({ userId }: CalendarProps) {
                         onChange={(e) => setNewSlotStart(e.target.value)}
                         className="w-full px-2 py-1 rounded border text-sm"
                       />
+                      <p className="text-xs opacity-60 mt-1">Will display in 12-hour format</p>
                     </div>
                     <div>
                       <label className="text-xs font-medium block mb-1">End Time</label>
@@ -815,6 +834,7 @@ export default function Calendar({ userId }: CalendarProps) {
                         onChange={(e) => setNewSlotEnd(e.target.value)}
                         className="w-full px-2 py-1 rounded border text-sm"
                       />
+                      <p className="text-xs opacity-60 mt-1">Will display in 12-hour format</p>
                     </div>
                   </div>
                   <div className="mb-3">
@@ -851,7 +871,7 @@ export default function Calendar({ userId }: CalendarProps) {
                              borderColor: "color-mix(in srgb, var(--foreground) 20%, transparent)"
                            }}>
                         <div className="flex items-center justify-between">
-                          <div className="font-medium">{slot.startTime}-{slot.endTime}</div>
+                          <div className="font-medium">{formatTimeTo12Hour(slot.startTime)}-{formatTimeTo12Hour(slot.endTime)}</div>
                           <button
                             onClick={() => removeTimeSlot(index)}
                             className="text-xs px-2 py-1 rounded border text-red-600"
