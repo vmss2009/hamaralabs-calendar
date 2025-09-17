@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { Calendar as BigCalendar, dateFnsLocalizer, SlotInfo } from "react-big-calendar";
-import { format, parse, startOfWeek, getDay, isBefore, startOfDay, isSameDay } from "date-fns";
+import { format, parse, startOfWeek, getDay, isBefore, startOfDay, isSameDay, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, getWeek, isToday } from "date-fns";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { useRouter } from "next/navigation";
 import { toast } from "@/components/ui/use-toast";
@@ -24,6 +24,129 @@ interface TimeSlot {
   endTime: string;
   maxSlots: number;
   bookedSlots: number;
+}
+
+// Replication Calendar Component
+interface ReplicationCalendarProps {
+  selectedDates: string[];
+  onDateToggle: (dateStr: string) => void;
+  currentDate: Date | null;
+}
+
+function ReplicationCalendar({ selectedDates, onDateToggle, currentDate }: ReplicationCalendarProps) {
+  const [viewDate, setViewDate] = useState(new Date());
+  
+  const monthStart = startOfMonth(viewDate);
+  const monthEnd = endOfMonth(viewDate);
+  const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 }); // Start on Sunday
+  const calendarEnd = addMonths(monthEnd, 0);
+  
+  const days = eachDayOfInterval({ start: calendarStart, end: monthEnd });
+  
+  const previousMonth = () => setViewDate(subMonths(viewDate, 1));
+  const nextMonth = () => setViewDate(addMonths(viewDate, 1));
+  
+  const today = startOfDay(new Date());
+  const currentDateStr = currentDate ? format(currentDate, 'yyyy-MM-dd') : '';
+  
+  return (
+    <div className="p-3">
+      {/* Calendar Header */}
+      <div className="flex items-center justify-between mb-3">
+        <button 
+          onClick={previousMonth}
+          className="p-1 rounded hover:bg-opacity-20"
+          style={{ background: "color-mix(in srgb, var(--foreground) 10%, transparent)" }}
+        >
+          ←
+        </button>
+        <h3 className="text-sm font-medium">
+          {format(viewDate, 'MMMM yyyy')}
+        </h3>
+        <button 
+          onClick={nextMonth}
+          className="p-1 rounded hover:bg-opacity-20"
+          style={{ background: "color-mix(in srgb, var(--foreground) 10%, transparent)" }}
+        >
+          →
+        </button>
+      </div>
+      
+      {/* Days of week header */}
+      <div className="grid grid-cols-7 gap-1 mb-1">
+        {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
+          <div key={day} className="text-xs text-center py-1 font-medium opacity-70">
+            {day}
+          </div>
+        ))}
+      </div>
+      
+      {/* Calendar days */}
+      <div className="grid grid-cols-7 gap-1">
+        {days.map((day) => {
+          const dayStr = format(day, 'yyyy-MM-dd');
+          const isSelected = selectedDates.includes(dayStr);
+          const isPast = isBefore(day, today);
+          const isCurrentMonth = day.getMonth() === viewDate.getMonth();
+          const isCurrentDate = dayStr === currentDateStr;
+          const isTodayDate = isToday(day);
+          
+          return (
+            <button
+              key={dayStr}
+              onClick={() => !isPast && isCurrentMonth && !isCurrentDate && onDateToggle(dayStr)}
+              disabled={isPast || !isCurrentMonth || isCurrentDate}
+              className={`
+                text-xs h-8 rounded transition-colors
+                ${
+                  isPast || !isCurrentMonth
+                    ? 'opacity-30 cursor-not-allowed'
+                    : isCurrentDate
+                      ? 'opacity-50 cursor-not-allowed'
+                      : 'hover:opacity-80 cursor-pointer'
+                }
+              `}
+              style={{
+                background: isSelected 
+                  ? 'var(--foreground)' 
+                  : isTodayDate
+                    ? 'color-mix(in srgb, var(--foreground) 20%, transparent)'
+                    : isCurrentDate
+                      ? 'color-mix(in srgb, var(--foreground) 15%, transparent)'
+                      : 'color-mix(in srgb, var(--foreground) 5%, transparent)',
+                color: isSelected 
+                  ? 'var(--background)' 
+                  : 'var(--foreground)',
+                border: isTodayDate && !isSelected
+                  ? '1px solid var(--foreground)'
+                  : 'none'
+              }}
+            >
+              {format(day, 'd')}
+            </button>
+          );
+        })}
+      </div>
+      
+      {/* Legend */}
+      <div className="mt-3 text-xs opacity-70">
+        <div className="flex flex-wrap gap-2 justify-center">
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded" style={{ background: 'var(--foreground)' }}></div>
+            <span>Selected</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded border" style={{ borderColor: 'var(--foreground)' }}></div>
+            <span>Today</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded" style={{ background: 'color-mix(in srgb, var(--foreground) 15%, transparent)' }}></div>
+            <span>Current</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // Allow day styling on RBC
@@ -513,41 +636,70 @@ export default function Calendar({ userId }: CalendarProps) {
                     </button>
                     {showReplicationModal && (
                       <div>
-                        <p className="text-xs mb-2 opacity-70">
-                          Select additional dates to apply the same schedule:
-                        </p>
-                        <div className="grid grid-cols-7 gap-1 text-xs mb-2">
-                          {/* Generate next 14 days */}
-                          {Array.from({ length: 14 }, (_, i) => {
-                            const date = new Date();
-                            date.setDate(date.getDate() + i + 1);
-                            const dateStr = format(date, 'yyyy-MM-dd');
-                            const isSelected = selectedReplicationDates.includes(dateStr);
-                            return (
-                              <button
-                                key={dateStr}
-                                onClick={() => toggleReplicationDate(dateStr)}
-                                className={`p-1 rounded text-xs ${
-                                  isSelected ? 'font-medium' : ''
-                                }`}
-                                style={{
-                                  background: isSelected 
-                                    ? 'var(--foreground)' 
-                                    : 'color-mix(in srgb, var(--foreground) 10%, transparent)',
-                                  color: isSelected 
-                                    ? 'var(--background)' 
-                                    : 'var(--foreground)'
-                                }}
-                              >
-                                {format(date, 'M/d')}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {selectedReplicationDates.length > 0 && (
-                          <p className="text-xs opacity-60">
-                            Will apply to {selectedReplicationDates.length + 1} dates total
+                        <div className="text-xs mb-3">
+                          <p className="opacity-70 mb-1">
+                            👆 Click on dates in the calendar below to select them for replication
                           </p>
+                          <p className="text-xs opacity-60">
+                            • Past dates and the current date are disabled
+                            • Click selected dates again to deselect them
+                            • Navigate months using arrow buttons
+                          </p>
+                        </div>
+                        
+                        {/* Mini Calendar for Date Selection */}
+                        <div className="border rounded-md mb-3"
+                             style={{ borderColor: "color-mix(in srgb, var(--foreground) 20%, transparent)" }}>
+                          <ReplicationCalendar 
+                            selectedDates={selectedReplicationDates}
+                            onDateToggle={toggleReplicationDate}
+                            currentDate={selectedDate}
+                          />
+                        </div>
+                        
+                        {selectedReplicationDates.length > 0 && (
+                          <div className="text-xs mb-2">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="font-medium">Selected dates ({selectedReplicationDates.length}):</p>
+                              <button
+                                onClick={() => setSelectedReplicationDates([])}
+                                className="text-xs px-2 py-1 rounded border text-red-600"
+                                style={{ borderColor: "color-mix(in srgb, var(--foreground) 25%, transparent)" }}
+                              >
+                                Clear All
+                              </button>
+                            </div>
+                            <div className="flex flex-wrap gap-1 mb-2">
+                              {selectedReplicationDates
+                                .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+                                .map(dateStr => (
+                                <span 
+                                  key={dateStr}
+                                  className="px-2 py-1 rounded text-xs flex items-center gap-1"
+                                  style={{ 
+                                    background: "color-mix(in srgb, var(--foreground) 15%, transparent)" 
+                                  }}
+                                >
+                                  <span>{format(new Date(dateStr), 'MMM d, yyyy')}</span>
+                                  <button
+                                    onClick={() => toggleReplicationDate(dateStr)}
+                                    className="text-red-600 hover:text-red-800 font-bold"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                            <div className="p-2 rounded" 
+                                 style={{ background: "color-mix(in srgb, var(--foreground) 8%, transparent)" }}>
+                              <p className="font-medium text-green-600">
+                                ✓ Will apply schedule to {selectedReplicationDates.length + 1} dates total
+                              </p>
+                              <p className="opacity-70 mt-1">
+                                Original: {selectedDate ? format(selectedDate, 'MMM d, yyyy') : ''}
+                              </p>
+                            </div>
+                          </div>
                         )}
                       </div>
                     )}
