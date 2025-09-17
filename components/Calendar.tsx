@@ -34,7 +34,14 @@ interface ReplicationCalendarProps {
 }
 
 function ReplicationCalendar({ selectedDates, onDateToggle, currentDate }: ReplicationCalendarProps) {
-  const [viewDate, setViewDate] = useState(new Date());
+  const [viewDate, setViewDate] = useState(currentDate || new Date());
+  
+  // Update viewDate when currentDate changes (when switching between different schedule dates)
+  useEffect(() => {
+    if (currentDate) {
+      setViewDate(currentDate);
+    }
+  }, [currentDate]);
   
   const monthStart = startOfMonth(viewDate);
   const monthEnd = endOfMonth(viewDate);
@@ -60,9 +67,16 @@ function ReplicationCalendar({ selectedDates, onDateToggle, currentDate }: Repli
         >
           ←
         </button>
-        <h3 className="text-sm font-medium">
-          {format(viewDate, 'MMMM yyyy')}
-        </h3>
+        <div className="text-center">
+          <h3 className="text-sm font-medium">
+            {format(viewDate, 'MMMM yyyy')}
+          </h3>
+          {currentDate && viewDate.getMonth() === currentDate.getMonth() && viewDate.getFullYear() === currentDate.getFullYear() && (
+            <p className="text-xs opacity-60">
+              (editing {format(currentDate, 'MMM d')})
+            </p>
+          )}
+        </div>
         <button 
           onClick={nextMonth}
           className="p-1 rounded hover:bg-opacity-20"
