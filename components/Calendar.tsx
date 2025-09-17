@@ -203,7 +203,7 @@ function ModernCalendar({ selectedDate, onDateSelect, schedules, onMonthChange }
                   <div className={`text-xs mt-0.5 ${
                     isSelected ? 'text-current opacity-80' : 'opacity-70'
                   }`}>
-                    {scheduleInfo?.timeSlots.length} slots
+                    {scheduleInfo?.timeSlots.length === 1 ? '1 slot' : `${scheduleInfo?.timeSlots.length} slots`}
                   </div>
                 </div>
               )}
