@@ -21,16 +21,24 @@ const localizer = dateFnsLocalizer({
 interface SchedulePageProps {
   params: Promise<{ username: string }>;
 }
+interface TimeSlot {
+  id: string;
+  startTime: string;
+  endTime: string;
+  maxSlots: number;
+  bookedSlots: number;
+}
+
 interface Schedule {
   id: string;
   userId: string;
   date: Date;
-  timeSlots: string[];
+  timeSlots: TimeSlot[];
   createdAt: Date;
   updatedAt: Date;
 }
 interface CalendarEvent extends Event {
-  timeSlots?: string[];
+  timeSlots?: TimeSlot[];
 }
 
 export default function SchedulePage({ params }: SchedulePageProps) {
@@ -44,7 +52,7 @@ export default function SchedulePage({ params }: SchedulePageProps) {
 
   // booking UI state
   const [isBooking, setIsBooking] = useState(false);
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
   const [notes, setNotes] = useState("");
@@ -150,7 +158,8 @@ export default function SchedulePage({ params }: SchedulePageProps) {
         body: JSON.stringify({
           username,
           date: format(selectedDate, "yyyy-MM-dd"),
-          timeSlot: selectedSlot,
+          startTime: selectedSlot.startTime,
+          endTime: selectedSlot.endTime,
           guestName,
           guestEmail,
           notes,
@@ -160,7 +169,7 @@ export default function SchedulePage({ params }: SchedulePageProps) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j?.message || "Failed to book");
       }
-      toast({ title: "Booked!", description: `You’re in for ${selectedSlot}.` });
+      toast({ title: "Booked!", description: `You're in for ${selectedSlot.startTime}-${selectedSlot.endTime}.` });
 
       // refresh schedules so slot disappears
   const schedulesResponse = await fetch(`/api/schedules/public/${username}?leadMinutes=30`);
@@ -260,7 +269,9 @@ export default function SchedulePage({ params }: SchedulePageProps) {
                 event: ({ event }: { event: CalendarEvent }) => (
                   <div className="p-1" onClick={() => handleSelectSlot(event)}>
                     <div className="font-semibold">{event.title}</div>
-                    <div className="text-xs">{event.timeSlots?.length} time slots available</div>
+                    <div className="text-xs">
+                      {event.timeSlots?.length} slot{event.timeSlots?.length === 1 ? '' : 's'} available
+                    </div>
                   </div>
                 ),
               }}
@@ -283,34 +294,50 @@ export default function SchedulePage({ params }: SchedulePageProps) {
             ) : selectedSchedule ? (
               <div>
                 <div className="mb-4">
-                  <p className="text-sm">{selectedSchedule.timeSlots.length} slots available</p>
+                  <p className="text-sm">
+                    {selectedSchedule.timeSlots.length} time slot{selectedSchedule.timeSlots.length === 1 ? '' : 's'} available
+                  </p>
                 </div>
 
                 <div className="space-y-2">
-          {selectedSchedule.timeSlots.map((slot, index) => (
-                    <div
-                      key={index}
-                      className="p-3 rounded-md border flex items-center justify-between"
-                      style={{ background: "color-mix(in srgb, var(--foreground) 4%, transparent)",
-                               borderColor: "color-mix(in srgb, var(--foreground) 15%, transparent)" }}
-                    >
-            <div className="font-medium">{slot} IST</div>
-                      <button
-                        className="px-3 py-1 text-sm rounded-md"
-                        style={{ background: "var(--foreground)", color: "var(--background)" }}
-                        onClick={() => setSelectedSlot(slot)}
+                  {selectedSchedule.timeSlots.map((slot, index) => {
+                    const availableCount = slot.maxSlots - slot.bookedSlots;
+                    return (
+                      <div
+                        key={index}
+                        className="p-3 rounded-md border flex items-center justify-between"
+                        style={{ 
+                          background: "color-mix(in srgb, var(--foreground) 4%, transparent)",
+                          borderColor: "color-mix(in srgb, var(--foreground) 15%, transparent)",
+                          opacity: availableCount > 0 ? 1 : 0.5
+                        }}
                       >
-                        Book
-                      </button>
-                    </div>
-                  ))}
+                        <div>
+                          <div className="font-medium">{slot.startTime}-{slot.endTime} IST</div>
+                          <div className="text-xs opacity-70">
+                            {availableCount}/{slot.maxSlots} available
+                          </div>
+                        </div>
+                        <button
+                          className="px-3 py-1 text-sm rounded-md disabled:opacity-50"
+                          style={{ background: "var(--foreground)", color: "var(--background)" }}
+                          onClick={() => setSelectedSlot(slot)}
+                          disabled={availableCount === 0}
+                        >
+                          {availableCount > 0 ? 'Book' : 'Full'}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* Booking form */}
                 {selectedSlot && (
                   <div className="mt-6 border-t pt-4"
                        style={{ borderColor: "color-mix(in srgb, var(--foreground) 15%, transparent)" }}>
-                    <h3 className="font-semibold mb-3">Book {selectedSlot}</h3>
+                    <h3 className="font-semibold mb-3">
+                      Book {selectedSlot.startTime}-{selectedSlot.endTime} IST
+                    </h3>
                     <div className="space-y-3">
                       <input
                         className="w-full border rounded-md p-2"

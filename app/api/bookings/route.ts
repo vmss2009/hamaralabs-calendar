@@ -29,10 +29,11 @@ export async function GET(req: Request) {
         status: { not: "CANCELED" },
         date: { gte: dayStartUtc, lt: dayEndUtc },
       },
-      orderBy: [{ timeSlot: "asc" }, { createdAt: "asc" }],
+      orderBy: [{ startTime: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,
-        timeSlot: true,
+        startTime: true,
+        endTime: true,
         guestName: true,
         guestEmail: true,
         notes: true,
@@ -50,9 +51,9 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-  const { username, date, timeSlot, guestName, guestEmail, notes, slotId } = await req.json();
+    const { username, date, startTime, endTime, guestName, guestEmail, notes, slotId } = await req.json();
 
-    if (!username || !date || !timeSlot || !guestName || !guestEmail) {
+    if (!username || !date || !startTime || !endTime || !guestName || !guestEmail) {
       return NextResponse.json({ message: "Missing fields" }, { status: 400 });
     }
 
@@ -82,32 +83,57 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Cannot book past dates" }, { status: 400 });
     }
 
-    // Find the schedule for that *day* (not exact instant)
+    // Find the schedule for that day
     const schedule = await prisma.schedule.findFirst({
       where: {
         userId: user.id,
         date: { gte: dayStartUtc, lt: dayEndUtc },
       },
-      select: { id: true, date: true, timeSlots: true },
+      include: {
+        timeSlots: {
+          where: {
+            startTime,
+            endTime
+          }
+        }
+      }
     });
 
-    if (!schedule) {
+    if (!schedule || schedule.timeSlots.length === 0) {
       return NextResponse.json({ message: "Time slot not available" }, { status: 409 });
     }
 
-    // Validate the slot still exists
-    if (!schedule.timeSlots.includes(timeSlot)) {
-      return NextResponse.json({ message: "Time slot not available" }, { status: 409 });
+    const timeSlot = schedule.timeSlots[0];
+    
+    // Check if there are available slots
+    if (timeSlot.bookedSlots >= timeSlot.maxSlots) {
+      return NextResponse.json({ message: "Time slot fully booked" }, { status: 409 });
     }
 
-    // Transaction: create booking; remove slot from schedule
+    // Count existing confirmed bookings for this time slot
+    const existingBookings = await prisma.booking.count({
+      where: {
+        userId: user.id,
+        date: { gte: dayStartUtc, lt: dayEndUtc },
+        startTime,
+        endTime,
+        status: { not: "CANCELED" }
+      }
+    });
+
+    if (existingBookings >= timeSlot.maxSlots) {
+      return NextResponse.json({ message: "Time slot fully booked" }, { status: 409 });
+    }
+
+    // Transaction: create booking and update booked slots count
     try {
       const [booking] = await prisma.$transaction([
         prisma.booking.create({
           data: {
             userId: user.id,
-            date: schedule.date,      // store the exact schedule date we found
-            timeSlot,
+            date: schedule.date,
+            startTime,
+            endTime,
             guestName,
             guestEmail,
             notes,
@@ -115,15 +141,16 @@ export async function POST(req: Request) {
             ...(slotId ? { slotId: String(slotId) } : {}),
           },
         }),
-        prisma.schedule.update({
-          where: { id: schedule.id },
+        prisma.timeSlot.update({
+          where: { id: timeSlot.id },
           data: {
-            timeSlots: {
-              set: schedule.timeSlots.filter((s) => s !== timeSlot),
-            },
-          },
-        }),
+            bookedSlots: {
+              increment: 1
+            }
+          }
+        })
       ]);
+      
       // Optional external phone call trigger based on user metadata
       try {
         const callOnBook = (user as any)?.metadata?.callOnBook === true;
@@ -137,11 +164,8 @@ export async function POST(req: Request) {
 
       return NextResponse.json({ booking }, { status: 201 });
     } catch (err: any) {
-      // Unique violation on Booking @@unique([userId, date, timeSlot]) still protects races
-      if (err?.code === "P2002") {
-        return NextResponse.json({ message: "Slot already booked" }, { status: 409 });
-      }
-      throw err;
+      console.error("Booking error:", err);
+      return NextResponse.json({ message: "Failed to create booking" }, { status: 500 });
     }
   } catch (e) {
     console.error(e);

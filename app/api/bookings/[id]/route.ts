@@ -13,43 +13,50 @@ export async function DELETE(_req: NextRequest, { params }: { params: any }) {
     const { id } = params;
     const booking = await prisma.booking.findUnique({
       where: { id },
-      select: { id: true, userId: true, date: true, timeSlot: true },
+      select: { id: true, userId: true, date: true, startTime: true, endTime: true },
     });
     if (!booking) return NextResponse.json({ error: "Not found" }, { status: 404 });
     if (booking.userId !== session.user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Find matching schedule (userId + date unique)
+    // Find matching schedule and time slot
     const schedule = await prisma.schedule.findFirst({
       where: { userId: booking.userId, date: booking.date },
-      select: { id: true, timeSlots: true },
+      include: {
+        timeSlots: {
+          where: {
+            startTime: booking.startTime,
+            endTime: booking.endTime
+          }
+        }
+      }
     });
 
-    // If no schedule, optionally recreate one with this single timeSlot (rare)
     const ops: any[] = [];
-
-    if (schedule) {
-      const ts = new Set(schedule.timeSlots);
-      ts.add(booking.timeSlot);
-      // Sort time slots lexicographically (HH:MM-HH:MM) for consistency
-      const sorted = Array.from(ts).sort();
-      ops.push(prisma.schedule.update({ where: { id: schedule.id }, data: { timeSlots: { set: sorted } } }));
-    } else {
-      ops.push(prisma.schedule.create({
+    
+    // Delete the booking
+    ops.push(prisma.booking.delete({ where: { id: booking.id } }));
+    
+    // Decrement the booked slots count if schedule and time slot exist
+    if (schedule && schedule.timeSlots.length > 0) {
+      const timeSlot = schedule.timeSlots[0];
+      ops.push(prisma.timeSlot.update({
+        where: { id: timeSlot.id },
         data: {
-          userId: booking.userId,
-          date: startOfDay(booking.date),
-          timeSlots: [booking.timeSlot],
-        },
+          bookedSlots: {
+            decrement: 1
+          }
+        }
       }));
     }
 
-    ops.push(prisma.booking.delete({ where: { id: booking.id } }));
-
     await prisma.$transaction(ops);
 
-    return NextResponse.json({ success: true, restoredSlot: booking.timeSlot });
+    return NextResponse.json({ 
+      success: true, 
+      restoredSlot: `${booking.startTime}-${booking.endTime}` 
+    });
   } catch (e) {
     console.error("Delete booking failed", e);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

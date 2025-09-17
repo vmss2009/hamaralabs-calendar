@@ -29,6 +29,13 @@ export async function GET(request: NextRequest) {
         userId,
         date: new Date(date),
       },
+      include: {
+        timeSlots: {
+          orderBy: {
+            startTime: 'asc'
+          }
+        }
+      }
     });
     
     return NextResponse.json(schedules);
@@ -48,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
     
     const body = await request.json();
-    const { date, timeSlots, userId } = body;
+    const { date, timeSlots, userId, replicateDates } = body;
     
     if (!date || !timeSlots || !userId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -59,42 +66,92 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
-    // Check if a schedule already exists for this date
-    const existingSchedule = await prisma.schedule.findUnique({
-      where: {
-        userId_date: {
-          userId,
-          date: new Date(date),
-        },
-      },
-    });
-    
-    let schedule;
-    
-    if (existingSchedule) {
-      // Update existing schedule
-      schedule = await prisma.schedule.update({
-        where: {
-          id: existingSchedule.id,
-        },
-        data: {
-          timeSlots,
-        },
-      });
-    } else {
-      // Create new schedule
-      schedule = await prisma.schedule.create({
-        data: {
-          userId,
-          date: new Date(date),
-          timeSlots,
-        },
-      });
+    // Validate time slot format
+    for (const slot of timeSlots) {
+      if (!slot.startTime || !slot.endTime || !slot.maxSlots || slot.maxSlots < 1) {
+        return NextResponse.json({ error: "Invalid time slot format" }, { status: 400 });
+      }
     }
     
-    return NextResponse.json(schedule);
+    const datesToUpdate = replicateDates && Array.isArray(replicateDates) ? 
+      [date, ...replicateDates] : [date];
+    
+    const schedules = [];
+    
+    // Process each date
+    for (const currentDate of datesToUpdate) {
+      // Check if a schedule already exists for this date
+      const existingSchedule = await prisma.schedule.findUnique({
+        where: {
+          userId_date: {
+            userId,
+            date: new Date(currentDate),
+          },
+        },
+        include: {
+          timeSlots: true
+        }
+      });
+      
+      let schedule;
+      
+      if (existingSchedule) {
+        // Delete existing time slots and create new ones
+        await prisma.timeSlot.deleteMany({
+          where: {
+            scheduleId: existingSchedule.id
+          }
+        });
+        
+        // Create new time slots
+        await prisma.timeSlot.createMany({
+          data: timeSlots.map((slot: any) => ({
+            scheduleId: existingSchedule.id,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            maxSlots: slot.maxSlots,
+            bookedSlots: 0
+          }))
+        });
+        
+        schedule = await prisma.schedule.findUnique({
+          where: { id: existingSchedule.id },
+          include: { timeSlots: { orderBy: { startTime: 'asc' } } }
+        });
+      } else {
+        // Create new schedule with time slots
+        schedule = await prisma.schedule.create({
+          data: {
+            userId,
+            date: new Date(currentDate),
+            timeSlots: {
+              create: timeSlots.map((slot: any) => ({
+                startTime: slot.startTime,
+                endTime: slot.endTime,
+                maxSlots: slot.maxSlots,
+                bookedSlots: 0
+              }))
+            }
+          },
+          include: {
+            timeSlots: {
+              orderBy: {
+                startTime: 'asc'
+              }
+            }
+          }
+        });
+      }
+      
+      schedules.push(schedule);
+    }
+    
+    return NextResponse.json({ 
+      schedules, 
+      message: `Updated ${schedules.length} schedule(s)` 
+    });
   } catch (error) {
     console.error("Error saving schedule:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-} 
+}
