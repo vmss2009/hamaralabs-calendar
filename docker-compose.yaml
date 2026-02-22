@@ -1,13 +1,10 @@
-networks:
-  hamaralabs-net:
-
 volumes:
   db-data:
 
 services:
   hamaralabs-calendar-db:
     container_name: hamaralabs-calendar-db
-    image: postgres:15
+    image: postgres:16
     restart: always
     environment:
       POSTGRES_USER: hamaralabs
@@ -16,16 +13,22 @@ services:
     volumes:
       - db-data:/var/lib/postgresql/data
     networks:
-      - hamaralabs-net
+      - hamaralabs-network
 
   hamaralabs-calendar:
     container_name: hamaralabs-calendar
     image: ghcr.io/vmss2009/hamaralabs-calendar:v6
+    restart: always
+    init: true
     depends_on:
       - hamaralabs-calendar-db
     ports:
-      - "3005:3000"
+      - "3000:3000"
     env_file:
       - .env
     networks:
-      - hamaralabs-net
+      - hamaralabs-network
+
+networks:
+  hamaralabs-network:
+    external: true
