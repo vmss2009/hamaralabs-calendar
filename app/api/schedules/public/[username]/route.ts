@@ -14,10 +14,10 @@ function startOfDayIST(date: Date): Date {
 
 export async function GET(
   request: NextRequest,
-  { params }: any
+  { params }: { params: Promise<{ username: string }> }
 ) {
   try {
-    const { username } = params;
+    const { username } = await params;
     const url = new URL(request.url);
     const leadMinutesParam = url.searchParams.get("leadMinutes");
     // Default 30 minute lead if not provided
@@ -26,7 +26,7 @@ export async function GET(
     const todayStart = startOfDayIST(now); // IST day boundary in UTC timeline
 
     // Find the user by username
-    const user = await (prisma.user as any).findUnique({ where: { username } });
+    const user = await prisma.user.findUnique({ where: { username } });
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -37,6 +37,13 @@ export async function GET(
     // Get all schedules for this user, filter out past dates (IST)
     let schedules = await prisma.schedule.findMany({
       where: { userId: user.id },
+      include: {
+        timeSlots: {
+          orderBy: {
+            startTime: 'asc'
+          }
+        }
+      },
       orderBy: { date: "asc" },
     });
 
@@ -54,13 +61,16 @@ export async function GET(
         const schedDate = new Date(sched.date);
         const schedDayStart = startOfDayIST(schedDate);
         if (schedDayStart.getTime() !== todayStart.getTime()) return sched; // not today (IST)
-        const newTimeSlots = sched.timeSlots.filter(slot => {
-          const startStr = slot.split("-")[0];
-          const [h, m] = startStr.split(":").map(Number);
+        
+        // Filter time slots based on availability and time threshold
+        const availableTimeSlots = sched.timeSlots.filter(slot => {
+          const [h, m] = slot.startTime.split(":").map(Number);
           const slotStart = new Date(schedDayStart.getTime() + (h * 60 + m) * 60000);
-          return slotStart.getTime() >= threshold.getTime();
+          // Only include if time hasn't passed and there are available slots
+          return slotStart.getTime() >= threshold.getTime() && slot.bookedSlots < slot.maxSlots;
         });
-        return { ...sched, timeSlots: newTimeSlots };
+        
+        return { ...sched, timeSlots: availableTimeSlots };
       });
     }
 

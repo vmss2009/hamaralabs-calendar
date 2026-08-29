@@ -3,13 +3,13 @@ import prisma from "@/lib/db/prisma";
 
 export async function GET(
   request: NextRequest,
-  { params }: any
+  { params }: { params: Promise<{ username: string }> }
 ) {
   try {
-    const { username } = params;
+    const { username } = await params;
     
-    // Fetch user including metadata (cast to any until prisma client regenerated with metadata field)
-    const user = await (prisma.user as any).findUnique({
+    // Fetch user including metadata
+    const user = await prisma.user.findUnique({
       where: { username },
     });
     
@@ -17,7 +17,8 @@ export async function GET(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
     
-    const isPublic = (user?.metadata && user.metadata.isPublic !== undefined) ? user.metadata.isPublic : true;
+    const metadata = user?.metadata as Record<string, unknown> | null;
+    const isPublic = (metadata && typeof metadata.isPublic === 'boolean') ? metadata.isPublic : true;
     return NextResponse.json({
       id: user.id,
       username: user.username,

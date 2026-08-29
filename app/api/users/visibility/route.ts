@@ -16,13 +16,13 @@ export async function PATCH(req: NextRequest) {
     }
 
     // Fetch existing metadata
-  const existing = await (prisma.user as any).findUnique({ where: { id: session.user.id } });
-  const currentMeta = (existing?.metadata || {}) as any;
+  const existing = await prisma.user.findUnique({ where: { id: session.user.id } });
+  const currentMeta = (existing?.metadata || {}) as Record<string, unknown>;
     const newMeta = { ...currentMeta, isPublic };
 
-  const user = await (prisma.user as any).update({ where: { id: session.user.id }, data: { metadata: newMeta } });
+  const user = await prisma.user.update({ where: { id: session.user.id }, data: { metadata: newMeta } });
   return NextResponse.json({ id: user.id, username: user.username, isPublic: newMeta.isPublic });
-  } catch (e:any) {
+  } catch (e: unknown) {
     console.error("Error updating visibility", e);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

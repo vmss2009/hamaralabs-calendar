@@ -25,7 +25,7 @@ export default function SignInPage() {
         redirect: true,
         callbackUrl: "/dashboard",
       });
-    } catch (err) {
+    } catch {
       setError("An unexpected error occurred. Please try again.");
       setIsLoading(false);
     }
