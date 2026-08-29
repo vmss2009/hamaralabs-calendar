@@ -56,7 +56,7 @@ RUN npm ci
 # 5. Copy all project files
 COPY . .
 
-RUN npx prisma generate
+RUN npx prisma-cli generate
 
 # 6. Build the project
 RUN npm run build
