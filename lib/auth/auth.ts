@@ -1,40 +1,21 @@
 import NextAuth from "next-auth";
-import AuthentikProvider from "next-auth/providers/authentik";
 import prisma from "@/lib/db/prisma";
+import { authConfig } from "./auth.config";
 
 // Generate a username from email
 function generateUsername(email: string): string {
   // Remove everything after @ and special characters
   const baseUsername = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
-  
+
   // Add a random number to make it unique
   const randomNum = Math.floor(Math.random() * 1000);
   return `${baseUsername}${randomNum}`;
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  providers: [
-    AuthentikProvider({
-      id: "authentik",
-      name: "Authentik",
-      clientId: process.env.AUTHENTIK_CLIENT_ID!,
-      clientSecret: process.env.AUTHENTIK_CLIENT_SECRET!,
-      issuer: process.env.AUTHENTIK_ISSUER,
-      authorization: {
-        url: `${process.env.AUTHENTIK_URL}/authorize/`,
-        params: { scope: "openid email profile" },
-      },
-      token: `${process.env.AUTHENTIK_URL}/token/`,
-      userinfo: `${process.env.AUTHENTIK_URL}/userinfo/`,
-      profile(profile) {
-        return {
-          name: profile.name,
-          email: profile.email,
-        };
-      },
-    }),
-  ],
+  ...authConfig,
   callbacks: {
+    ...authConfig.callbacks,
     async signIn({ user }) {
       if (!user.email) {
         return false;
@@ -51,13 +32,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           let username = generateUsername(user.email);
           let isUsernameTaken = true;
           let attempts = 0;
-          
+
           // Keep trying until we find a unique username
           while (isUsernameTaken && attempts < 10) {
             const existingUser = await prisma.user.findUnique({
               where: { username },
             });
-            
+
             if (!existingUser) {
               isUsernameTaken = false;
             } else {
@@ -65,12 +46,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               attempts++;
             }
           }
-          
+
           if (isUsernameTaken) {
             console.error("Failed to generate unique username");
             return false;
           }
-          
+
           dbUser = await prisma.user.create({
             data: {
               email: user.email,
@@ -92,23 +73,5 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         return false;
       }
     },
-    async jwt({ token, user, profile }) {
-      if (user) {
-        token.id = user.id; // Persist the database user ID in the token
-        token.sub = profile?.sub as string;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string; // Pass the database user ID to the session
-      }
-      return session;
-    },
-  },
-  secret: process.env.NEXTAUTH_SECRET,
-  pages: {
-    signIn: "/auth/signin", // Redirect to custom login page
-    error: "/auth/error", // Redirect to error page
   },
 });
