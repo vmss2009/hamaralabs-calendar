@@ -48,17 +48,19 @@ FROM node:22-alpine AS deps
 WORKDIR /app
 
 # 3. Install dependencies first (only package.json + lock files)
-COPY package.json package-lock.json* ./
+COPY package*.json ./
 
 # 4. Install dependencies using npm ci
 RUN npm ci
 
-# 5. Copy all project files
+# 5. Copy Prisma schema and app source
+COPY prisma ./prisma
 COPY . .
 
-RUN npx prisma-cli generate
+# 6. Generate Prisma client before building
+RUN npx prisma generate
 
-# 6. Build the project
+# 7. Build the project
 RUN npm run build
 
 # 7. Production image
