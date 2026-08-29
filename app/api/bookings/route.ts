@@ -1,6 +1,7 @@
 // app/api/bookings/route.ts
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
+import { auth } from "@/lib/auth/auth";
 import { isBefore } from "date-fns";
 
 // Helper: build a UTC midnight from yyyy-MM-dd
@@ -12,12 +13,23 @@ function utcMidnightFromYMD(ymd: string) {
 
 export async function GET(req: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
     const date = searchParams.get("date"); // yyyy-MM-dd
 
     if (!userId || !date) {
       return NextResponse.json({ message: "Missing userId or date" }, { status: 400 });
+    }
+
+    // Bookings contain guest PII (name, email, notes) — only the owning
+    // calendar user may list them.
+    if (userId !== session.user.id) {
+      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
     }
 
     const dayStartUtc = utcMidnightFromYMD(date);
