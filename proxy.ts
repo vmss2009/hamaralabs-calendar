@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import type { NextAuthRequest } from "next-auth"
-import { auth } from "@/lib/auth/edge-auth"
+import { auth } from "@/lib/auth/auth"
 
 // Origins allowed to make cross-site, credentialed requests to /api/*.
 // Comma-separated list, e.g. "https://calendar.hamaralabs.com,https://partner.example.com"

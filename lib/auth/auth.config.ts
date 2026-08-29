@@ -1,8 +1,9 @@
 import type { NextAuthConfig } from "next-auth";
 import AuthentikProvider from "next-auth/providers/authentik";
 
-// Edge-safe NextAuth config: no Prisma/database access here, so this can be
-// imported by middleware (which runs on the Edge runtime).
+// Session storage is database-backed (see auth.ts, where the Prisma adapter
+// is attached) rather than JWT, so sessions can be revoked server-side by
+// deleting the Session row instead of just waiting out a signed cookie.
 export const authConfig: NextAuthConfig = {
   providers: [
     AuthentikProvider({
@@ -23,19 +24,19 @@ export const authConfig: NextAuthConfig = {
           email: profile.email,
         };
       },
+      // Authentik is the sole provider and the source of truth for email
+      // ownership, so it's safe to auto-link its account to an existing
+      // User row by email. This is also what lets accounts created before
+      // the Prisma adapter existed (no Account row yet) keep working on
+      // their next login instead of failing with OAuthAccountNotLinked.
+      allowDangerousEmailAccountLinking: true,
     }),
   ],
   callbacks: {
-    async jwt({ token, user, profile }) {
-      if (user) {
-        token.id = user.id; // Persist the database user ID in the token
-        token.sub = profile?.sub as string;
-      }
-      return token;
-    },
-    async session({ session, token }) {
+    // Only invoked for database session strategy (an adapter is attached).
+    async session({ session, user }) {
       if (session.user) {
-        session.user.id = token.id as string; // Pass the database user ID to the session
+        session.user.id = user.id;
       }
       return session;
     },

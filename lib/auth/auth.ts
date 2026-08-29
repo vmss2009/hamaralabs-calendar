@@ -1,4 +1,6 @@
 import NextAuth from "next-auth";
+import type { Adapter } from "next-auth/adapters";
+import { PrismaAdapter } from "@auth/prisma-adapter";
 import prisma from "@/lib/db/prisma";
 import { authConfig } from "./auth.config";
 
@@ -12,66 +14,44 @@ function generateUsername(email: string): string {
   return `${baseUsername}${randomNum}`;
 }
 
+async function generateUniqueUsername(email: string): Promise<string> {
+  for (let attempts = 0; attempts < 10; attempts++) {
+    const username = generateUsername(email);
+    const existing = await prisma.user.findUnique({ where: { username } });
+    if (!existing) return username;
+  }
+  throw new Error("Failed to generate unique username");
+}
+
+// The Prisma adapter's createUser() only knows about the fields OAuth
+// profiles provide (email, name, image). username is a required column we
+// own, so it's injected here before the adapter's insert rather than in a
+// separate post-creation update.
+const baseAdapter = PrismaAdapter(prisma);
+const adapter: Adapter = {
+  ...baseAdapter,
+  async createUser(user) {
+    const username = await generateUniqueUsername(user.email);
+    return baseAdapter.createUser!({
+      ...user,
+      username,
+      metadata: { isPublic: true, callOnBook: false },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+  },
+};
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
+  adapter,
   callbacks: {
     ...authConfig.callbacks,
     async signIn({ user }) {
-      if (!user.email) {
-        return false;
-      }
-
-      try {
-        // Check if user exists in database
-        let dbUser = await prisma.user.findUnique({
-          where: { email: user.email },
-        });
-
-        // If user doesn't exist, create them with a generated username
-        if (!dbUser) {
-          let username = generateUsername(user.email);
-          let isUsernameTaken = true;
-          let attempts = 0;
-
-          // Keep trying until we find a unique username
-          while (isUsernameTaken && attempts < 10) {
-            const existingUser = await prisma.user.findUnique({
-              where: { username },
-            });
-
-            if (!existingUser) {
-              isUsernameTaken = false;
-            } else {
-              username = generateUsername(user.email);
-              attempts++;
-            }
-          }
-
-          if (isUsernameTaken) {
-            console.error("Failed to generate unique username");
-            return false;
-          }
-
-          dbUser = await prisma.user.create({
-            data: {
-              email: user.email,
-              name: user.name || null,
-              username,
-              metadata: {
-                isPublic: true,
-                callOnBook: false,
-              },
-            },
-          });
-        }
-
-        // Add the database user ID to the user object
-        user.id = dbUser.id;
-        return true;
-      } catch (error) {
-        console.error("Error in signIn callback:", error);
-        return false;
-      }
+      // Existing users created before the Prisma adapter was introduced have
+      // no linked Account row; allowDangerousEmailAccountLinking on the
+      // Authentik provider (the only provider) lets their next login link
+      // one automatically instead of failing with OAuthAccountNotLinked.
+      return !!user.email;
     },
   },
 });
