@@ -77,6 +77,7 @@ COPY --from=deps --chown=appuser:appuser /app/.next ./.next
 COPY --from=deps --chown=appuser:appuser /app/node_modules ./node_modules
 COPY --from=deps --chown=appuser:appuser /app/package.json ./package.json
 COPY --from=deps --chown=appuser:appuser /app/prisma ./prisma
+COPY --from=deps --chown=appuser:appuser /app/prisma.config.ts ./prisma.config.ts
 COPY --from=deps --chown=appuser:appuser /app/tsconfig.json ./tsconfig.json
 
 # 11. Set environment variable to production
