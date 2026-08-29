@@ -28,15 +28,28 @@ export default auth((req: NextAuthRequest) => {
   if (!pathname.startsWith("/api/")) return NextResponse.next()
 
   const origin = req.headers.get("origin")
-  const isAllowedOrigin = !!origin && ALLOWED_ORIGINS.includes(origin)
+
+  // No Origin header means this isn't a cross-site browser request (e.g. a
+  // same-origin page load, or a server-to-server caller like the slots API
+  // integration) — nothing to check here, let route-level auth decide.
+  if (!origin) return NextResponse.next()
+
+  const isAllowedOrigin = ALLOWED_ORIGINS.includes(origin)
+
+  // A browser can't be tricked into lying about the Origin header, so a
+  // mismatch here means a cross-site request from a site we didn't
+  // allowlist — reject outright rather than just withholding CORS headers,
+  // otherwise a disallowed site could still trigger side effects (CSRF)
+  // even though it couldn't read the response back.
+  if (!isAllowedOrigin) {
+    return NextResponse.json({ error: "Origin not allowed" }, { status: 403 })
+  }
 
   // Preflight requests never reach the route handler, so they must be
   // answered here.
   if (req.method === "OPTIONS") {
-    const res = new NextResponse(null, { status: isAllowedOrigin ? 204 : 403 })
-    return isAllowedOrigin ? applyCors(res, origin) : res
+    return applyCors(new NextResponse(null, { status: 204 }), origin)
   }
 
-  const res = NextResponse.next()
-  return isAllowedOrigin ? applyCors(res, origin) : res
+  return applyCors(NextResponse.next(), origin)
 })
