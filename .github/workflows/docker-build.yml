@@ -10,7 +10,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: vmss2009/hamaralabs
+  IMAGE_NAME: vmss2009/hamaralabs-calendar
 
 jobs:
   build-and-push:
