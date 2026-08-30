@@ -101,6 +101,7 @@ model Booking {
   guestEmail String
   notes      String?
   status     BookingStatus @default(CONFIRMED)
+  completed  Boolean       @default(false)
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 

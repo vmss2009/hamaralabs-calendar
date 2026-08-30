@@ -408,14 +408,6 @@ interface CalendarProps {
   userId: string; 
 }
 
-interface BookingItem {
-  price: number;
-  total: number;
-  quantity: number;
-  description: string;
-  completed: boolean;
-}
-
 interface Booking {
   id: string;
   startTime: string;
@@ -424,8 +416,8 @@ interface Booking {
   guestEmail: string;
   notes?: string | null;
   status: "PENDING" | "CONFIRMED" | "CANCELED";
+  completed: boolean;
   createdAt: string;
-  items?: BookingItem[] | null;
 }
 
 export default function Calendar({ userId }: CalendarProps) {
@@ -566,31 +558,19 @@ export default function Calendar({ userId }: CalendarProps) {
     }
   };
 
-  const toggleItemCompleted = async (bookingId: string, itemIndex: number, completed: boolean) => {
+  const toggleBookingCompleted = async (bookingId: string, completed: boolean) => {
     // Optimistic update, rolled back on failure
-    setBookings((prev) =>
-      prev.map((b) =>
-        b.id === bookingId
-          ? { ...b, items: b.items?.map((item, i) => (i === itemIndex ? { ...item, completed } : item)) }
-          : b
-      )
-    );
+    setBookings((prev) => prev.map((b) => (b.id === bookingId ? { ...b, completed } : b)));
     try {
       const res = await fetch(`/api/bookings/${bookingId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemIndex, completed }),
+        body: JSON.stringify({ completed }),
       });
-      if (!res.ok) throw new Error("Failed to update item");
+      if (!res.ok) throw new Error("Failed to update booking");
     } catch {
-      toast({ title: "Error", description: "Failed to update item", variant: "destructive" });
-      setBookings((prev) =>
-        prev.map((b) =>
-          b.id === bookingId
-            ? { ...b, items: b.items?.map((item, i) => (i === itemIndex ? { ...item, completed: !completed } : item)) }
-            : b
-        )
-      );
+      toast({ title: "Error", description: "Failed to update booking", variant: "destructive" });
+      setBookings((prev) => prev.map((b) => (b.id === bookingId ? { ...b, completed: !completed } : b)));
     }
   };
 
@@ -844,24 +824,18 @@ export default function Calendar({ userId }: CalendarProps) {
                       {b.guestName} • <a className="underline" href={`mailto:${b.guestEmail}`}>{b.guestEmail}</a>
                     </div>
                     {b.notes ? <div className="text-sm mt-1">“{b.notes}”</div> : null}
-                    {b.items && b.items.length > 0 ? (
-                      <div className="mt-2 flex flex-col gap-1">
-                        {b.items.map((item, i) => (
-                          <label key={i} className="flex items-center gap-2 text-sm cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={item.completed}
-                              onChange={(e) => toggleItemCompleted(b.id, i, e.target.checked)}
-                            />
-                            <span>{item.description} — completed</span>
-                          </label>
-                        ))}
-                      </div>
-                    ) : null}
-                    <div className="mt-2 flex justify-end opacity-80 group-hover:opacity-100 transition-opacity">
+                    <div className="mt-2 flex items-center justify-between">
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={b.completed}
+                          onChange={(e) => toggleBookingCompleted(b.id, e.target.checked)}
+                        />
+                        Completed
+                      </label>
                       <button
                         onClick={() => deleteBooking(b.id)}
-                        className="text-xs px-2 py-1 rounded-md border"
+                        className="text-xs px-2 py-1 rounded-md border opacity-80 group-hover:opacity-100 transition-opacity"
                         style={{ borderColor: "color-mix(in srgb, var(--foreground) 25%, transparent)" }}
                       >
                         Delete

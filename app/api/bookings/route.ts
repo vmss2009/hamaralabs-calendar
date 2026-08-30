@@ -50,17 +50,12 @@ export async function GET(req: Request) {
         guestEmail: true,
         notes: true,
         status: true,
+        completed: true,
         createdAt: true,
-        Slot: { select: { items: true } },
       },
     });
 
-    const result = bookings.map(({ Slot, ...booking }) => ({
-      ...booking,
-      items: Slot?.items ?? null,
-    }));
-
-    return NextResponse.json(result);
+    return NextResponse.json(bookings);
   } catch (e) {
     console.error(e);
     return NextResponse.json({ message: "Server error" }, { status: 500 });

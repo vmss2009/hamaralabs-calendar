@@ -1,18 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
 import { auth } from "@/lib/auth/auth";
-import { Prisma } from "@prisma/client";
 
-interface SlotItem {
-  price: number;
-  total: number;
-  quantity: number;
-  description: string;
-  completed: boolean;
-  [key: string]: unknown;
-}
-
-// Toggle the `completed` flag on one line item of the booking's linked Slot.
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth();
@@ -22,43 +11,25 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const { id } = await params;
     const body = await request.json();
-    const itemIndex = Number(body?.itemIndex);
-    const completed = body?.completed;
-
-    if (!Number.isInteger(itemIndex) || itemIndex < 0 || typeof completed !== "boolean") {
-      return NextResponse.json({ error: "itemIndex (integer) and completed (boolean) are required" }, { status: 400 });
+    if (typeof body?.completed !== "boolean") {
+      return NextResponse.json({ error: "completed (boolean) is required" }, { status: 400 });
     }
 
-    const booking = await prisma.booking.findUnique({
-      where: { id },
-      select: { userId: true, slotId: true },
-    });
+    const booking = await prisma.booking.findUnique({ where: { id }, select: { userId: true } });
     if (!booking) return NextResponse.json({ error: "Not found" }, { status: 404 });
     if (booking.userId !== session.user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    if (!booking.slotId) {
-      return NextResponse.json({ error: "Booking has no associated slot" }, { status: 400 });
-    }
 
-    const slot = await prisma.slot.findUnique({ where: { id: booking.slotId }, select: { items: true } });
-    if (!slot) return NextResponse.json({ error: "Slot not found" }, { status: 404 });
-
-    const items = Array.isArray(slot.items) ? (slot.items as unknown as SlotItem[]) : [];
-    if (itemIndex >= items.length) {
-      return NextResponse.json({ error: "itemIndex out of range" }, { status: 400 });
-    }
-
-    const updatedItems = items.map((item, i) => (i === itemIndex ? { ...item, completed } : item));
-
-    await prisma.slot.update({
-      where: { id: booking.slotId },
-      data: { items: updatedItems as unknown as Prisma.InputJsonValue },
+    const updated = await prisma.booking.update({
+      where: { id },
+      data: { completed: body.completed },
+      select: { id: true, completed: true },
     });
 
-    return NextResponse.json({ items: updatedItems });
+    return NextResponse.json(updated);
   } catch (error: unknown) {
-    console.error("Update booking item failed", error);
+    console.error("Update booking failed", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
