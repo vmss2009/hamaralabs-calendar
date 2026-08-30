@@ -51,10 +51,16 @@ export async function GET(req: Request) {
         notes: true,
         status: true,
         createdAt: true,
+        Slot: { select: { items: true } },
       },
     });
 
-    return NextResponse.json(bookings);
+    const result = bookings.map(({ Slot, ...booking }) => ({
+      ...booking,
+      items: Slot?.items ?? null,
+    }));
+
+    return NextResponse.json(result);
   } catch (e) {
     console.error(e);
     return NextResponse.json({ message: "Server error" }, { status: 500 });
