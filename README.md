@@ -11,6 +11,14 @@
 - Authentik authentication
 - Responsive design (works like a charm on mobile)
 
+## Integrations -
+
+- Connected authentik
+- Used NextAuth
+- CI/CD using github actions. A human trigger in the actions tab of github automatically - builds docker file, checks for errors and deploys it in the github registry, please check the [actions.yml file](.github/workflows/docker-build.yml).
+   - Github registry link - <https://github.com/vmss2009/hamaralabs-calendar/pkgs/container/hamaralabs-calendar>
+- **Imp** - Self hosted, used docker to containerise everything aforementioned, making it very secured
+
 ## Want to run this by yourself ?
 
 - Setup authentik (follow <https://docs.goauthentik.io/install-config/>)
