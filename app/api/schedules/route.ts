@@ -16,6 +16,16 @@ interface ScheduleRequestBody {
   replicateDates?: string[];
 }
 
+// Upper bounds so a single request can't fan out into an unbounded number
+// of DB writes inside one transaction.
+const MAX_REPLICATE_DATES = 366;
+const MAX_TIME_SLOTS = 288; // one every 5 minutes for a full day
+const MAX_SLOTS_PER_TIME = 10000;
+
+function isValidDateString(value: unknown): value is string {
+  return typeof value === "string" && value.length <= 40 && !isNaN(new Date(value).getTime());
+}
+
 // GET /api/schedules - Get schedules for a specific date and user
 export async function GET(request: NextRequest) {
   try {
@@ -44,6 +54,10 @@ export async function GET(request: NextRequest) {
       userId,
     };
     
+    if ((date && !isValidDateString(date)) || (startDate && !isValidDateString(startDate)) || (endDate && !isValidDateString(endDate))) {
+      return NextResponse.json({ error: "Invalid date" }, { status: 400 });
+    }
+
     if (date) {
       // Single date query (existing behavior)
       whereClause.date = new Date(date);
@@ -100,14 +114,27 @@ export async function POST(request: NextRequest) {
     }
     
     // Validate time slot format
+    if (!Array.isArray(timeSlots) || timeSlots.length > MAX_TIME_SLOTS) {
+      return NextResponse.json({ error: "Invalid time slot format" }, { status: 400 });
+    }
     for (const slot of timeSlots) {
-      if (!slot.startTime || !slot.endTime || !slot.maxSlots || slot.maxSlots < 1) {
+      if (
+        !slot ||
+        typeof slot.startTime !== "string" || !slot.startTime || slot.startTime.length > 5 ||
+        typeof slot.endTime !== "string" || !slot.endTime || slot.endTime.length > 5 ||
+        !Number.isInteger(slot.maxSlots) || slot.maxSlots < 1 || slot.maxSlots > MAX_SLOTS_PER_TIME
+      ) {
         return NextResponse.json({ error: "Invalid time slot format" }, { status: 400 });
       }
     }
-    
-    const datesToUpdate = replicateDates && Array.isArray(replicateDates) ? 
-      [date, ...replicateDates] : [date];
+
+    if (replicateDates != null && (!Array.isArray(replicateDates) || replicateDates.length > MAX_REPLICATE_DATES)) {
+      return NextResponse.json({ error: "Invalid replicateDates" }, { status: 400 });
+    }
+    const datesToUpdate = replicateDates ? [date, ...replicateDates] : [date];
+    if (!datesToUpdate.every(isValidDateString)) {
+      return NextResponse.json({ error: "Invalid date" }, { status: 400 });
+    }
     
     const schedules: Array<{ id: string; date: Date; timeSlots: Array<{ id: string; startTime: string; endTime: string; maxSlots: number; bookedSlots: number }> }> = [];
     

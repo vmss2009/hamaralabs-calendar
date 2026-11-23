@@ -276,13 +276,15 @@ interface ReplicationCalendarProps {
 
 function ReplicationCalendar({ selectedDates, onDateToggle, currentDate }: ReplicationCalendarProps) {
   const [viewDate, setViewDate] = useState(currentDate || new Date());
-  
-  // Update viewDate when currentDate changes (when switching between different schedule dates)
-  useEffect(() => {
-    if (currentDate) {
-      setViewDate(currentDate);
-    }
-  }, [currentDate]);
+
+  // Update viewDate when currentDate changes (when switching between different
+  // schedule dates). Adjusting state during render instead of in an effect
+  // avoids an extra render pass: https://react.dev/learn/you-might-not-need-an-effect
+  const [prevCurrentDate, setPrevCurrentDate] = useState(currentDate);
+  if (currentDate !== prevCurrentDate) {
+    setPrevCurrentDate(currentDate);
+    if (currentDate) setViewDate(currentDate);
+  }
   
   const monthStart = startOfMonth(viewDate);
   const monthEnd = endOfMonth(viewDate);
@@ -583,6 +585,9 @@ export default function Calendar({ userId }: CalendarProps) {
     fetchBookings(selected);
   }, [fetchSchedules, fetchBookings]);
 
+  // Data-fetching effects: the fetchers set a loading flag synchronously before
+  // awaiting the request, which is intentional, so the rule is disabled here.
+  /* eslint-disable react-hooks/set-state-in-effect */
   // Auto-fetch for today's date on mount
   useEffect(() => {
     if (selectedDate) {
@@ -590,11 +595,12 @@ export default function Calendar({ userId }: CalendarProps) {
       fetchBookings(selectedDate);
     }
   }, [selectedDate, fetchSchedules, fetchBookings]);
-  
+
   // Fetch monthly schedules when component mounts
   useEffect(() => {
     fetchMonthlySchedules(new Date());
   }, [fetchMonthlySchedules]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const addTimeSlot = () => {
     if (!newSlotStart || !newSlotEnd || newSlotMaxSlots < 1) {

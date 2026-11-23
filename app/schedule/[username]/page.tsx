@@ -248,11 +248,12 @@ interface Schedule {
 export default function SchedulePage({ params }: SchedulePageProps) {
   const { username } = use(params);
 
-  const [user, setUser] = useState<{ id: string; username: string; name?: string; email?: string; isPublic: boolean } | null>(null);
+  const [user, setUser] = useState<{ username: string; name?: string; isPublic: boolean } | null>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  // Start on today's date
+  const [selectedDate, setSelectedDate] = useState<Date | null>(() => startOfDay(new Date()));
 
   // booking UI state
   const [isBooking, setIsBooking] = useState(false);
@@ -306,13 +307,6 @@ export default function SchedulePage({ params }: SchedulePageProps) {
     };
     fetchData();
   }, [username, today]);
-
-  // Set today's date initially (once)
-  useEffect(() => {
-    if (!selectedDate) {
-      setSelectedDate(today);
-    }
-  }, [selectedDate, today]);
 
   // Derive the schedule for the selected date
   const selectedSchedule = useMemo(() => {

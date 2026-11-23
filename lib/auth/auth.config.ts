@@ -41,7 +41,8 @@ export const authConfig: NextAuthConfig = {
       return session;
     },
   },
-  secret: process.env.NEXTAUTH_SECRET,
+  // `secret` is intentionally not set here: next-auth reads AUTH_SECRET
+  // (falling back to NEXTAUTH_SECRET) and supports AUTH_SECRET_1..n rotation.
   pages: {
     signIn: "/auth/signin", // Redirect to custom login page
     error: "/auth/error", // Redirect to error page

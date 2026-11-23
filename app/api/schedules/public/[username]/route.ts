@@ -1,16 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
-
-// IST helpers
-const IST_OFFSET_MIN = 330; // +05:30 in minutes
-function startOfDayIST(date: Date): Date {
-  // Convert given UTC timestamp to IST by adding offset, take its UTC Y/M/D, then subtract offset to get UTC timestamp of that IST midnight.
-  const ist = new Date(date.getTime() + IST_OFFSET_MIN * 60000);
-  const y = ist.getUTCFullYear();
-  const m = ist.getUTCMonth();
-  const d = ist.getUTCDate();
-  return new Date(Date.UTC(y, m, d, 0, 0, 0) - IST_OFFSET_MIN * 60000);
-}
+import { isUserPublic } from "@/lib/user-visibility";
+import { BOOKING_LEAD_MINUTES, slotStartInstant, startOfDayIST } from "@/lib/schedule-time";
 
 export async function GET(
   request: NextRequest,
@@ -20,8 +11,9 @@ export async function GET(
     const { username } = await params;
     const url = new URL(request.url);
     const leadMinutesParam = url.searchParams.get("leadMinutes");
-    // Default 30 minute lead if not provided
-    const leadMinutes = leadMinutesParam ? Math.max(0, parseInt(leadMinutesParam, 10) || 0) : 30;
+    // Callers may ask for a longer lead, but never a shorter one than the
+    // booking API enforces (otherwise we'd list slots that can't be booked).
+    const leadMinutes = Math.max(BOOKING_LEAD_MINUTES, leadMinutesParam ? parseInt(leadMinutesParam, 10) || 0 : 0);
     const now = new Date(); // current UTC timestamp
     const todayStart = startOfDayIST(now); // IST day boundary in UTC timeline
 
@@ -32,7 +24,11 @@ export async function GET(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-  // Visibility is enforced at the UI level; always return schedules here
+    // Enforce visibility server-side; the UI check alone can be bypassed by
+    // calling this endpoint directly.
+    if (!isUserPublic(user.metadata)) {
+      return NextResponse.json({ error: "This schedule is private" }, { status: 403 });
+    }
 
     // Get all schedules for this user, filter out past dates (IST)
     let schedules = await prisma.schedule.findMany({
@@ -64,8 +60,7 @@ export async function GET(
         
         // Filter time slots based on availability and time threshold
         const availableTimeSlots = sched.timeSlots.filter(slot => {
-          const [h, m] = slot.startTime.split(":").map(Number);
-          const slotStart = new Date(schedDayStart.getTime() + (h * 60 + m) * 60000);
+          const slotStart = slotStartInstant(schedDate, slot.startTime);
           // Only include if time hasn't passed and there are available slots
           return slotStart.getTime() >= threshold.getTime() && slot.bookedSlots < slot.maxSlots;
         });
