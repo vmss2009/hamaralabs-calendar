@@ -30,6 +30,9 @@ COPY --from=deps /app/.next ./.next
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/package.json ./package.json
 COPY --from=deps /app/prisma ./prisma
+# Prisma 7 reads the database URL from prisma.config.ts (not schema.prisma),
+# so `prisma db push` fails without it.
+COPY --from=deps /app/prisma.config.ts ./prisma.config.ts
 COPY --from=deps /app/tsconfig.json ./tsconfig.json
 
 # 10. Set environment variable to production
