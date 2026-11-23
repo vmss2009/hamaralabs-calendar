@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
+import { isUserPublic } from "@/lib/user-visibility";
 
 export async function GET(
   request: NextRequest,
@@ -17,14 +18,12 @@ export async function GET(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
     
-    const metadata = user?.metadata as Record<string, unknown> | null;
-    const isPublic = (metadata && typeof metadata.isPublic === 'boolean') ? metadata.isPublic : true;
+    // This endpoint is unauthenticated, so only return what the public
+    // booking page needs — never the user's email or internal id.
     return NextResponse.json({
-      id: user.id,
       username: user.username,
       name: user.name,
-      email: user.email,
-      isPublic,
+      isPublic: isUserPublic(user.metadata),
     });
   } catch (error) {
     console.error("Error fetching user:", error);

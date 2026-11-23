@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
+import { isValidApiKey } from "@/lib/auth/api-key";
 
 // List slots (basic pagination) and Create slot
 export async function GET(req: NextRequest) {
+  if (!isValidApiKey(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { searchParams } = new URL(req.url);
   const skip = Number(searchParams.get("skip") || 0);
   const take = Math.min(Number(searchParams.get("take") || 20), 100);
@@ -18,6 +23,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  if (!isValidApiKey(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await req.json();
     const {

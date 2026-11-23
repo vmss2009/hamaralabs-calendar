@@ -1,0 +1,34 @@
+volumes:
+  db-data:
+
+services:
+  hamaralabs-calendar-db:
+    container_name: hamaralabs-calendar-db
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_USER: hamaralabs
+      POSTGRES_PASSWORD: hXMW515+0,E#J@^
+      POSTGRES_DB: hamaralabs
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - hamaralabs-network
+
+  hamaralabs-calendar:
+    container_name: hamaralabs-calendar
+    image: ghcr.io/vmss2009/hamaralabs-calendar:v9.4
+    restart: always
+    init: true
+    depends_on:
+      - hamaralabs-calendar-db
+    expose:
+      - "3000"
+    env_file:
+      - .env
+    networks:
+      - hamaralabs-network
+
+networks:
+  hamaralabs-network:
+    external: true

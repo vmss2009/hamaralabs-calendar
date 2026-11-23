@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./provider";
@@ -19,11 +20,16 @@ export const metadata: Metadata = {
   description: "A simple calendar app for managing schedules",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Render every page per request so the CSP nonce set in proxy.ts can be
+  // applied to Next.js scripts; statically prerendered HTML can't carry it
+  // and would be blocked by the policy.
+  await connection();
+
   return (
     <html lang="en">
       <body

@@ -34,8 +34,8 @@ export default function SignInPage() {
   // Show loading state while checking session
   if (status === "loading") {
     return (
-      <div className="min-h-screen bg-gray-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-        <div className="text-center">
+      <div className="min-h-screen bg-[#0a0a0a] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+        <div className="text-center text-gray-300">
           Loading...
         </div>
       </div>
@@ -43,27 +43,27 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#0a0a0a] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+        <h2 className="mt-6 text-center text-3xl font-extrabold text-white">
           Welcome to Calendar App
         </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
+        <p className="mt-2 text-center text-sm text-gray-400">
           Sign in to manage your schedule
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+        <div className="bg-gray-900 border border-gray-800 py-8 px-4 shadow sm:rounded-lg sm:px-10">
           {error && (
-            <div className="mb-4 p-4 text-sm text-red-700 bg-red-100 rounded-lg">
+            <div className="mb-4 p-4 text-sm text-red-300 bg-red-950/60 border border-red-900 rounded-lg">
               {error}
             </div>
           )}
           <button
             onClick={handleSignIn}
             disabled={isLoading}
-            className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${
+            className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-indigo-500 ${
               isLoading ? 'opacity-50 cursor-not-allowed' : ''
             }`}
           >

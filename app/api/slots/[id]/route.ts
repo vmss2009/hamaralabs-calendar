@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
+import { isValidApiKey } from "@/lib/auth/api-key";
 
-export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  if (!isValidApiKey(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { id } = await context.params;
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
@@ -14,6 +19,10 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
 }
 
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  if (!isValidApiKey(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { id } = await context.params;
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
@@ -42,7 +51,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
   }
 }
 
-export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  if (!isValidApiKey(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { id } = await context.params;
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });

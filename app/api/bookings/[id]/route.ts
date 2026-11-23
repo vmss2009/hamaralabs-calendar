@@ -2,6 +2,38 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
 import { auth } from "@/lib/auth/auth";
 
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const body = await request.json();
+    if (typeof body?.completed !== "boolean") {
+      return NextResponse.json({ error: "completed (boolean) is required" }, { status: 400 });
+    }
+
+    const booking = await prisma.booking.findUnique({ where: { id }, select: { userId: true } });
+    if (!booking) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (booking.userId !== session.user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const updated = await prisma.booking.update({
+      where: { id },
+      data: { completed: body.completed },
+      select: { id: true, completed: true },
+    });
+
+    return NextResponse.json(updated);
+  } catch (error: unknown) {
+    console.error("Update booking failed", error);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+}
+
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth();

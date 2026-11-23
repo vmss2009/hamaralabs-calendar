@@ -1,26 +1,27 @@
 import type { NextConfig } from "next";
 
+const securityHeaders = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+];
+
+// Block framing (clickjacking) on everything except the public booking page,
+// which may legitimately be embedded on other sites. This is the legacy
+// header; the full Content-Security-Policy (including frame-ancestors) is set
+// per request in proxy.ts because it carries a nonce.
+const noFramingHeaders = [
+  { key: "X-Frame-Options", value: "DENY" },
+];
+
 const nextConfig: NextConfig = {
     output: "standalone",
-    eslint: {
-        ignoreDuringBuilds: true,
-    },
+    poweredByHeader: false,
     async headers() {
         return [
-            {
-                source: '/api/:path*',
-                headers: [
-                { key: 'Access-Control-Allow-Credentials', value: 'true' },
-                { key: 'Access-Control-Allow-Origin', value: '*' }, // Adjust this to your frontend URL in production
-                { key: 'Access-Control-Allow-Methods', value: 'GET,DELETE,PATCH,POST,PUT' },
-                {
-                    key: 'Access-Control-Allow-Headers',
-                    value:
-                    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version',
-                },
-                ],
-            },
-        ]
+            { source: "/:path*", headers: securityHeaders },
+            { source: "/((?!schedule/).*)", headers: noFramingHeaders },
+        ];
     },
 };
 

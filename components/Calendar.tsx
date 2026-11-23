@@ -276,13 +276,15 @@ interface ReplicationCalendarProps {
 
 function ReplicationCalendar({ selectedDates, onDateToggle, currentDate }: ReplicationCalendarProps) {
   const [viewDate, setViewDate] = useState(currentDate || new Date());
-  
-  // Update viewDate when currentDate changes (when switching between different schedule dates)
-  useEffect(() => {
-    if (currentDate) {
-      setViewDate(currentDate);
-    }
-  }, [currentDate]);
+
+  // Update viewDate when currentDate changes (when switching between different
+  // schedule dates). Adjusting state during render instead of in an effect
+  // avoids an extra render pass: https://react.dev/learn/you-might-not-need-an-effect
+  const [prevCurrentDate, setPrevCurrentDate] = useState(currentDate);
+  if (currentDate !== prevCurrentDate) {
+    setPrevCurrentDate(currentDate);
+    if (currentDate) setViewDate(currentDate);
+  }
   
   const monthStart = startOfMonth(viewDate);
   const monthEnd = endOfMonth(viewDate);
@@ -409,13 +411,14 @@ interface CalendarProps {
 }
 
 interface Booking {
-  id: string; 
+  id: string;
   startTime: string;
   endTime: string;
-  guestName: string; 
-  guestEmail: string; 
+  guestName: string;
+  guestEmail: string;
   notes?: string | null;
-  status: "PENDING" | "CONFIRMED" | "CANCELED"; 
+  status: "PENDING" | "CONFIRMED" | "CANCELED";
+  completed: boolean;
   createdAt: string;
 }
 
@@ -557,6 +560,22 @@ export default function Calendar({ userId }: CalendarProps) {
     }
   };
 
+  const toggleBookingCompleted = async (bookingId: string, completed: boolean) => {
+    // Optimistic update, rolled back on failure
+    setBookings((prev) => prev.map((b) => (b.id === bookingId ? { ...b, completed } : b)));
+    try {
+      const res = await fetch(`/api/bookings/${bookingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ completed }),
+      });
+      if (!res.ok) throw new Error("Failed to update booking");
+    } catch {
+      toast({ title: "Error", description: "Failed to update booking", variant: "destructive" });
+      setBookings((prev) => prev.map((b) => (b.id === bookingId ? { ...b, completed: !completed } : b)));
+    }
+  };
+
   const handleDateSelect = useCallback((date: Date) => {
     const selected = startOfDay(date);
     setSelectedDate(selected);
@@ -566,6 +585,9 @@ export default function Calendar({ userId }: CalendarProps) {
     fetchBookings(selected);
   }, [fetchSchedules, fetchBookings]);
 
+  // Data-fetching effects: the fetchers set a loading flag synchronously before
+  // awaiting the request, which is intentional, so the rule is disabled here.
+  /* eslint-disable react-hooks/set-state-in-effect */
   // Auto-fetch for today's date on mount
   useEffect(() => {
     if (selectedDate) {
@@ -573,11 +595,12 @@ export default function Calendar({ userId }: CalendarProps) {
       fetchBookings(selectedDate);
     }
   }, [selectedDate, fetchSchedules, fetchBookings]);
-  
+
   // Fetch monthly schedules when component mounts
   useEffect(() => {
     fetchMonthlySchedules(new Date());
   }, [fetchMonthlySchedules]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const addTimeSlot = () => {
     if (!newSlotStart || !newSlotEnd || newSlotMaxSlots < 1) {
@@ -807,10 +830,18 @@ export default function Calendar({ userId }: CalendarProps) {
                       {b.guestName} • <a className="underline" href={`mailto:${b.guestEmail}`}>{b.guestEmail}</a>
                     </div>
                     {b.notes ? <div className="text-sm mt-1">“{b.notes}”</div> : null}
-                    <div className="mt-2 flex justify-end opacity-80 group-hover:opacity-100 transition-opacity">
+                    <div className="mt-2 flex items-center justify-between">
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={b.completed}
+                          onChange={(e) => toggleBookingCompleted(b.id, e.target.checked)}
+                        />
+                        Completed
+                      </label>
                       <button
                         onClick={() => deleteBooking(b.id)}
-                        className="text-xs px-2 py-1 rounded-md border"
+                        className="text-xs px-2 py-1 rounded-md border opacity-80 group-hover:opacity-100 transition-opacity"
                         style={{ borderColor: "color-mix(in srgb, var(--foreground) 25%, transparent)" }}
                       >
                         Delete
